@@ -1,14 +1,14 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppSettings } from '../types';
 import { THEME_PRESETS, APP_FONTS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO } from '../constants';
-import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key } from 'lucide-react';
-import { clearApiKey, hasValidKey } from '../services/geminiService';
+import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key, Globe, Server } from 'lucide-react';
+import { clearApiKey, hasValidKey, saveApiSettings, getApiSettings, ApiProvider } from '../services/geminiService';
 
 interface Props {
   settings: AppSettings;
   onUpdate: (newSettings: AppSettings) => void;
-  // Project Management Actions (Hidden but kept in interface to avoid breaking parent usage)
+  // Project Management Actions
   onExportZip?: () => void;
   onExportPDF?: () => void;
   onExportPPTX?: () => void;
@@ -20,9 +20,36 @@ interface Props {
 }
 
 export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDrive, isDriveConnected }) => {
-  
+  const [localKey, setLocalKey] = useState('');
+  const [provider, setProvider] = useState<ApiProvider>('google');
+
+  // Load provider on mount
+  useEffect(() => {
+      const current = getApiSettings();
+      setProvider(current.provider);
+      // We don't load the key back into the input for security visual reasons usually, 
+      // but if you want to edit it, we can populate it.
+      if (current.key) setLocalKey(current.key);
+  }, []);
+
   const update = (key: keyof AppSettings, value: any) => {
     onUpdate({ ...settings, [key]: value });
+  };
+
+  const handleSaveApi = () => {
+      if (localKey.trim().length > 5) {
+          saveApiSettings(localKey, provider);
+          // Reload to apply singleton changes
+          window.location.reload();
+      } else {
+          // Just saving provider if key is empty (assuming key exists)
+          if (hasValidKey()) {
+              saveApiSettings('', provider); // Empty key means keep existing in storage
+              window.location.reload();
+          } else {
+              alert("Please enter a valid API Key");
+          }
+      }
   };
 
   const handleClearKey = () => {
@@ -32,7 +59,6 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
       }
   };
 
-  // Helper for Segmented Control
   const SegmentedControl = ({ options, value, onChange }: { options: {label: string, value: string, icon?: React.ReactNode}[], value: string, onChange: (v: string) => void }) => (
     <div className="flex bg-[var(--bg-header)] p-1 rounded-lg border border-[var(--border-color)]">
         {options.map(opt => (
@@ -52,12 +78,11 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in pb-32 pt-8 px-4">
       
-      {/* HEADER */}
       <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-[var(--text-main)] tracking-tight">Settings</h2>
       </div>
 
-      {/* 1. VISUAL IDENTITY (Compact) */}
+      {/* 1. VISUAL IDENTITY */}
       <section className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
               <Palette size={14} className="text-[var(--accent)]"/>
@@ -84,107 +109,97 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
           </div>
       </section>
 
-      {/* 2. TYPOGRAPHY (Compact) */}
+      {/* 2. API & PROVIDER SETTINGS (NEW) */}
       <section className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
-              <Type size={14} className="text-[var(--accent)]"/>
-              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Typography</h3>
+              <Server size={14} className="text-[var(--accent)]"/>
+              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">AI Provider & Key</h3>
           </div>
-          <div className="p-3">
-              <div className="relative">
-                  <select 
-                      value={settings.fontFamily}
-                      onChange={(e) => update('fontFamily', e.target.value)}
-                      className="w-full appearance-none bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)] font-bold focus:border-[var(--accent)] focus:outline-none cursor-pointer"
-                  >
-                      {APP_FONTS.map(font => (
-                          <option key={font.name} value={font.value}>{font.name}</option>
-                      ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"/>
+          <div className="p-4 space-y-4">
+              
+              {/* Provider Selection */}
+              <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Service Provider</label>
+                  <div className="grid grid-cols-2 gap-2">
+                      <button 
+                          onClick={() => setProvider('google')}
+                          className={`p-3 rounded-lg border text-left transition-all ${provider === 'google' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                      >
+                          <div className="flex items-center gap-2 mb-1"><Globe size={14}/> <span className="font-bold text-xs">Google Native</span></div>
+                          <div className="text-[9px] opacity-70">Official SDK. Requires VPN in some regions. Best for native Gemini features.</div>
+                      </button>
+                      <button 
+                          onClick={() => setProvider('openrouter')}
+                          className={`p-3 rounded-lg border text-left transition-all ${provider === 'openrouter' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                      >
+                          <div className="flex items-center gap-2 mb-1"><Server size={14}/> <span className="font-bold text-xs">OpenRouter</span></div>
+                          <div className="text-[9px] opacity-70">Proxy service. Works globally. Supports Gemini + Flux for images.</div>
+                      </button>
+                  </div>
               </div>
+
+              {/* API Key Input */}
+              <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                      {provider === 'google' ? 'Google AI Studio Key' : 'OpenRouter API Key'}
+                  </label>
+                  <div className="flex gap-2">
+                      <div className="relative flex-1">
+                          <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/>
+                          <input 
+                              type="password" 
+                              value={localKey}
+                              onChange={(e) => setLocalKey(e.target.value)}
+                              placeholder={provider === 'google' ? "AIzaSy..." : "sk-or-v1..."}
+                              className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg pl-9 pr-3 py-2 text-xs text-[var(--text-main)] focus:border-[var(--accent)] focus:outline-none"
+                          />
+                      </div>
+                      <button 
+                          onClick={handleSaveApi}
+                          className="px-4 bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 rounded-lg text-xs font-bold uppercase"
+                      >
+                          Save & Reload
+                      </button>
+                  </div>
+                  <p className="text-[9px] text-[var(--text-muted)]">
+                      Keys are stored locally in your browser. {provider === 'openrouter' ? 'Get key at openrouter.ai' : 'Get key at aistudio.google.com'}
+                  </p>
+              </div>
+
+              {hasValidKey() && (
+                  <div className="pt-2">
+                      <button onClick={handleClearKey} className="text-red-500 hover:text-red-400 text-[10px] font-bold uppercase flex items-center gap-1">
+                          <LogOut size={12}/> Remove stored key
+                      </button>
+                  </div>
+              )}
           </div>
       </section>
 
-      {/* 3. SYSTEM & AI (Minimalist Toggles) */}
+      {/* 3. SYSTEM DEFAULTS */}
       <section className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
               <Cpu size={14} className="text-[var(--accent)]"/>
-              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">System</h3>
+              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">System Defaults</h3>
           </div>
-          
           <div className="p-4 space-y-5">
-              
-              {/* Image Engine */}
               <div className="space-y-2">
                   <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center justify-between">
-                      Image Model
-                      <span className="text-[9px] text-[var(--accent)]">{settings.imageModel === MODEL_IMAGE_PRO ? 'Pro (High Quality)' : 'Flash (Fast)'}</span>
+                      Image Model Quality
+                      <span className="text-[9px] text-[var(--accent)]">{settings.imageModel === MODEL_IMAGE_PRO ? 'Pro (Slower)' : 'Flash (Fast)'}</span>
                   </label>
                   <SegmentedControl 
                       value={settings.imageModel}
                       onChange={(v) => update('imageModel', v)}
                       options={[
-                          { label: 'Nano Banana (Flash)', value: MODEL_IMAGE_FLASH, icon: <Zap size={10}/> },
-                          { label: 'Nano Banana 2 (Pro)', value: MODEL_IMAGE_PRO, icon: <Star size={10}/> }
+                          { label: 'Standard (Fast)', value: MODEL_IMAGE_FLASH, icon: <Zap size={10}/> },
+                          { label: 'Pro (High Quality)', value: MODEL_IMAGE_PRO, icon: <Star size={10}/> }
                       ]}
                   />
+                  <p className="text-[9px] text-[var(--text-muted)]">
+                      {provider === 'openrouter' ? "Note: On OpenRouter, 'Standard' uses fast models, 'Pro' uses higher quality models (Flux/Recraft/Pro)." : "Controls Nano Banana Flash vs Pro models."}
+                  </p>
               </div>
-
-              {/* Chat Font Size */}
-              <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-2">
-                          <MessageSquare size={12}/> Chat Text Size
-                      </label>
-                      <span className="text-[10px] font-bold text-[var(--text-main)]">{settings.chatFontSize || 12}px</span>
-                  </div>
-                  <input 
-                      type="range" 
-                      min="10" 
-                      max="24" 
-                      step="1"
-                      value={settings.chatFontSize || 12} 
-                      onChange={(e) => update('chatFontSize', parseInt(e.target.value))}
-                      className="w-full h-1.5 bg-[var(--bg-input)] rounded-full appearance-none accent-[var(--accent)] cursor-pointer"
-                  />
-              </div>
-
-              {/* API KEY LOGOUT */}
-              <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]">
-                  <div className="flex flex-col">
-                      <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-                          <Key size={14} className="text-[var(--text-muted)]"/> 
-                          API Access
-                      </span>
-                      <span className="text-[9px] text-[var(--text-muted)]">Manage your Gemini Key</span>
-                  </div>
-                  <button 
-                      onClick={handleClearKey}
-                      className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-md text-[10px] font-bold uppercase flex items-center gap-2 transition-all"
-                  >
-                      <LogOut size={12}/> Change Key
-                  </button>
-              </div>
-
-              {/* Google Drive Toggle */}
-              <div className="flex items-center justify-between pt-2 border-t border-[var(--border-color)]">
-                  <div className="flex flex-col">
-                      <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2">
-                          <Cloud size={14} className={isDriveConnected ? "text-green-400" : "text-[var(--text-muted)]"}/> 
-                          Cloud Sync
-                      </span>
-                      <span className="text-[9px] text-[var(--text-muted)]">Backup generated assets to Google Drive</span>
-                  </div>
-                  <button 
-                      onClick={() => !isDriveConnected && onConnectDrive && onConnectDrive()}
-                      disabled={isDriveConnected}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${isDriveConnected ? 'bg-green-500 cursor-default' : 'bg-[#333] hover:bg-[#444]'}`}
-                  >
-                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${isDriveConnected ? 'left-6' : 'left-1'}`} />
-                  </button>
-              </div>
-
           </div>
       </section>
 

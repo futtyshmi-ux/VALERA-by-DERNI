@@ -79,6 +79,7 @@ export interface AppSettings {
   assistantIdleImage?: string; // GIF for standing
   assistantSitImage?: string; // GIF for sitting/resting
   chatFontSize?: number; // New: Font size for Director Chat (default 12)
+  apiProvider?: 'google' | 'openrouter'; // NEW: Provider selector
 }
 
 export enum GenerationStatus {
