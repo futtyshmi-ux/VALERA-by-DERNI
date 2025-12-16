@@ -11,10 +11,10 @@ import { generateProjectPDF } from './services/pdfService';
 import { generateProjectPPTX } from './services/pptxService';
 import { generateDaVinciXML, generateEDL, generateDaVinciPythonScript } from './services/davinciService';
 import { generateSRT } from './services/srtService';
-import { hasValidKey, saveApiKey } from './services/geminiService';
-import { INITIAL_PROJECT_STATE, THEME_PRESETS, MODEL_IMAGE_FLASH, INITIAL_VALERA_MESSAGES } from './constants';
+import { hasValidKey, saveKey, setActiveProvider, ApiProvider } from './services/geminiService';
+import { INITIAL_PROJECT_STATE, THEME_PRESETS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO, OPENROUTER_IMAGE_MODELS, INITIAL_VALERA_MESSAGES } from './constants';
 import { ProjectData, AppSettings, TimelineFrame, Character, TimelineSettings, ChatMessage, LabAssetSuggestion, TimelineSuggestion, DirectorAction, GenerationLogEntry } from './types';
-import { Clapperboard, Monitor, Settings as SettingsIcon, Film, Loader2, Download, Maximize, FileText, Presentation, Package, Captions, ListVideo, Code, Send, Bot, Key, ArrowRight, ExternalLink } from 'lucide-react';
+import { Clapperboard, Monitor, Settings as SettingsIcon, Film, Loader2, Download, Maximize, FileText, Presentation, Package, Captions, ListVideo, Code, Send, Bot, Key, ArrowRight, ExternalLink, Globe, Server, Check } from 'lucide-react';
 
 const App: React.FC = () => {
   const [projectData, setProjectData] = useState<ProjectData>(INITIAL_PROJECT_STATE);
@@ -29,11 +29,35 @@ const App: React.FC = () => {
   const [isDriveConnected, setIsDriveConnected] = useState(false); // Mock state
   const [isLoading, setIsLoading] = useState(true);
   const [hasKey, setHasKey] = useState(false);
+  const [isSkipped, setIsSkipped] = useState(false); // New: Allow skipping auth
+  
+  // Auth Form State
   const [inputKey, setInputKey] = useState('');
+  const [authProvider, setAuthProvider] = useState<ApiProvider>('google');
+  const [authModel, setAuthModel] = useState(MODEL_IMAGE_FLASH);
+
   const [notification, setNotification] = useState<{msg: string, type: 'info' | 'success'} | null>(null);
   const [isDirectorFullScreen, setIsDirectorFullScreen] = useState(false);
 
-  // Init
+  // Load Settings from LocalStorage
+  useEffect(() => {
+      const savedSettings = localStorage.getItem('valera_app_settings');
+      if (savedSettings) {
+          try {
+              const parsed = JSON.parse(savedSettings);
+              setSettings(prev => ({ ...prev, ...parsed }));
+              // Pre-select model in auth screen if saved
+              if (parsed.imageModel) setAuthModel(parsed.imageModel);
+          } catch (e) { console.error("Failed to load settings", e); }
+      }
+  }, []);
+
+  // Save Settings to LocalStorage on change
+  useEffect(() => {
+      localStorage.setItem('valera_app_settings', JSON.stringify(settings));
+  }, [settings]);
+
+  // Init Logic
   useEffect(() => {
     telegramService.init();
     
@@ -69,10 +93,10 @@ const App: React.FC = () => {
 
   // Autosave
   useEffect(() => {
-    if (!isLoading && hasKey) {
+    if (!isLoading && (hasKey || isSkipped)) {
       saveProjectToIDB(projectData);
     }
-  }, [projectData, isLoading, hasKey]);
+  }, [projectData, isLoading, hasKey, isSkipped]);
 
   // Apply Theme
   useEffect(() => {
@@ -95,13 +119,27 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleSaveKey = () => {
-      if (inputKey.trim().length > 10) {
-          saveApiKey(inputKey);
-          window.location.reload(); // Reload to initialize with new key
+  const handleAuthSubmit = () => {
+      if (inputKey.trim().length > 5) {
+          saveKey(authProvider, inputKey);
+          setActiveProvider(authProvider);
+          // Save chosen model to settings
+          setSettings(prev => ({ ...prev, imageModel: authModel, apiProvider: authProvider }));
+          window.location.reload(); // Reload to initialize services with new key
       } else {
-          alert("Please enter a valid Google AI API Key.");
+          alert("Please enter a valid API Key.");
       }
+  };
+
+  const handleSkipAuth = () => {
+      setIsSkipped(true);
+      // Still set the model in settings if they chose one, even if they skip key
+      setSettings(prev => ({ ...prev, imageModel: authModel, apiProvider: authProvider }));
+      // Load project data manually since we skipped the key check effect
+      loadProjectFromIDB().then(data => {
+          if (data) setProjectData(data);
+          else setProjectData(INITIAL_PROJECT_STATE);
+      });
   };
 
   const downloadBlob = (blob: Blob, fileName: string) => {
@@ -256,55 +294,129 @@ SUBTITLES
   const currentAspectRatio = getRatioFromSettings(projectData.timelineSettings);
 
   // --- RENDERING AUTH SCREEN ---
-  if (!isLoading && !hasKey) {
+  if (!isLoading && !hasKey && !isSkipped) {
       return (
-        <div className="flex h-screen w-full items-center justify-center bg-[#000000] text-white flex-col relative overflow-hidden p-6">
+        <div className="flex h-screen w-full items-center justify-center bg-[#000000] text-white flex-col relative overflow-hidden p-6 font-sans">
             <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-black to-[#0f172a] z-0"></div>
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] z-0 opacity-30"></div>
 
-            <div className="z-10 w-full max-w-md bg-[#1e1e1e] border border-[#333] rounded-2xl shadow-2xl p-8 flex flex-col gap-6 animate-fade-in-up">
+            <div className="z-10 w-full max-w-lg bg-[#1e1e1e] border border-[#333] rounded-2xl shadow-2xl p-8 flex flex-col gap-6 animate-fade-in-up">
+                
+                {/* Header */}
                 <div className="flex flex-col items-center text-center gap-2">
                     <div className="w-16 h-16 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)] mb-2">
                         <span className="text-3xl font-black text-white">V</span>
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight">ACCESS REQUIRED</h1>
+                    <h1 className="text-2xl font-bold tracking-tight">WELCOME TO VALERA</h1>
                     <p className="text-sm text-gray-400">
-                        Valera runs on Google Gemini AI. <br/> To continue, please enter your API Key.
+                        Professional AI Pre-Production Suite
                     </p>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                    <div className="relative">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                            <Key size={18} />
-                        </div>
-                        <input 
-                            type="password" 
-                            placeholder="Paste your Gemini API Key here..." 
-                            value={inputKey}
-                            onChange={(e) => setInputKey(e.target.value)}
-                            className="w-full bg-[#111] border border-[#333] rounded-lg py-3 pl-10 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 transition-colors"
-                        />
+                {/* Setup Form */}
+                <div className="flex flex-col gap-4">
+                    
+                    {/* 1. Provider Toggle */}
+                    <div className="bg-[#111] p-1 rounded-lg flex gap-1 border border-[#333]">
+                        <button 
+                            onClick={() => setAuthProvider('google')}
+                            className={`flex-1 py-2 rounded-md text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all
+                            ${authProvider === 'google' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-300 hover:bg-[#222]'}`}
+                        >
+                            <Globe size={12}/> Google Native
+                        </button>
+                        <button 
+                            onClick={() => setAuthProvider('openrouter')}
+                            className={`flex-1 py-2 rounded-md text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all
+                            ${authProvider === 'openrouter' ? 'bg-purple-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-300 hover:bg-[#222]'}`}
+                        >
+                            <Server size={12}/> OpenRouter
+                        </button>
                     </div>
-                    <button 
-                        onClick={handleSaveKey}
-                        className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:brightness-110 text-white font-bold uppercase tracking-wider rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
-                    >
-                        Enter Studio <ArrowRight size={16}/>
-                    </button>
+
+                    {/* 2. Model Selection */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Preferred Image Model</label>
+                        <div className="relative">
+                            <select 
+                                value={authModel}
+                                onChange={(e) => setAuthModel(e.target.value)}
+                                className="w-full bg-[#111] border border-[#333] rounded-lg px-3 py-2.5 text-xs text-white focus:border-[var(--accent)] focus:outline-none appearance-none font-medium"
+                            >
+                                {authProvider === 'google' ? (
+                                    <>
+                                        <option value={MODEL_IMAGE_FLASH}>Nano Banana (Flash) - Fast</option>
+                                        <option value={MODEL_IMAGE_PRO}>Nano Banana Pro (Pro) - High Quality</option>
+                                    </>
+                                ) : (
+                                    OPENROUTER_IMAGE_MODELS.map(m => (
+                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))
+                                )}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                                <ArrowRight size={12} className="rotate-90"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. API Key Input */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">
+                            {authProvider === 'google' ? 'Google AI Studio Key' : 'OpenRouter API Key'}
+                        </label>
+                        <div className="relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                <Key size={14} />
+                            </div>
+                            <input 
+                                type="password" 
+                                placeholder={authProvider === 'google' ? "AIzaSy..." : "sk-or-v1..."}
+                                value={inputKey}
+                                onChange={(e) => setInputKey(e.target.value)}
+                                className="w-full bg-[#111] border border-[#333] rounded-lg py-2.5 pl-9 pr-4 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[var(--accent)] transition-colors"
+                            />
+                        </div>
+                        <div className="flex justify-end">
+                            <a 
+                                href={authProvider === 'google' ? "https://aistudio.google.com/app/apikey" : "https://openrouter.ai/keys"}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[9px] text-gray-500 hover:text-[var(--accent)] flex items-center gap-1 font-medium"
+                            >
+                                Get Key <ExternalLink size={8}/>
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* 4. Action Buttons */}
+                    <div className="flex flex-col gap-2 pt-2">
+                        <button 
+                            onClick={handleAuthSubmit}
+                            className="w-full py-3 bg-[var(--accent)] hover:brightness-110 text-white font-bold uppercase tracking-wider rounded-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 text-xs"
+                        >
+                            Enter Studio <ArrowRight size={14}/>
+                        </button>
+                        
+                        <div className="relative flex items-center py-2">
+                            <div className="flex-grow border-t border-[#333]"></div>
+                            <span className="flex-shrink-0 mx-2 text-[9px] text-gray-600 uppercase font-bold">OR</span>
+                            <div className="flex-grow border-t border-[#333]"></div>
+                        </div>
+
+                        <button 
+                            onClick={handleSkipAuth}
+                            className="w-full py-2 bg-[#222] hover:bg-[#333] text-gray-400 hover:text-white font-bold uppercase tracking-wider rounded-lg border border-[#333] flex items-center justify-center gap-2 transition-colors text-[10px]"
+                        >
+                            Skip (Offline Mode)
+                        </button>
+                    </div>
                 </div>
 
-                <div className="text-center pt-4 border-t border-[#333]">
-                    <a 
-                        href="https://aistudio.google.com/app/apikey" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center justify-center gap-1 font-medium"
-                    >
-                        Get a free key at aistudio.google.com <ExternalLink size={10}/>
-                    </a>
-                    <p className="text-[10px] text-gray-600 mt-2">
-                        Your key is stored locally in your browser. We do not see it.
+                <div className="text-center pt-2">
+                    <p className="text-[10px] text-gray-600">
+                        <span className="block mb-1">Configuration is saved locally.</span>
+                        <span className="text-[var(--accent)]">Note:</span> You can change these settings later in the <b>Settings</b> tab.
                     </p>
                 </div>
             </div>

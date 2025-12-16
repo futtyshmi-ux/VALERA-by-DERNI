@@ -8,6 +8,16 @@ export const MODEL_TEXT = 'gemini-2.5-flash'; // Optimized for speed/chat
 
 export const IMAGE_SIZES = ["1K", "2K", "4K"];
 
+export const OPENROUTER_IMAGE_MODELS = [
+    { label: 'Flux 1 Schnell (Fast)', value: 'black-forest-labs/flux-1-schnell' },
+    { label: 'Flux 1 Dev (High Quality)', value: 'black-forest-labs/flux-1-dev' },
+    { label: 'Stable Diffusion 3 Medium', value: 'stabilityai/stable-diffusion-3-medium' },
+    { label: 'Recraft Vector/Raster', value: 'recraft-ai/recraft-v3' },
+    { label: 'DALL-E 3', value: 'openai/dall-e-3' },
+    { label: 'Nano Banana (Hybrid / Google Key)', value: 'gemini-2.5-flash-image' },
+    { label: 'Nano Banana Pro (Hybrid / Google Key)', value: 'gemini-3-pro-image-preview' }
+];
+
 // --- VEL DEFAULTS ---
 export const VEL_DEFAULTS = {
     IDLE: "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXY3MW5rOWp3Nmlia2hpOGkyanF5cXdiMXhpa21jMWIzNjRmZHdmYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/7SKCpAajMgiwyjIElA/giphy.gif",

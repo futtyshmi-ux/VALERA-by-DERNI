@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppSettings } from '../types';
-import { THEME_PRESETS, APP_FONTS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO } from '../constants';
+import { THEME_PRESETS, APP_FONTS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO, OPENROUTER_IMAGE_MODELS } from '../constants';
 import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key, Globe, Server, Save } from 'lucide-react';
 import { clearApiKey, hasValidKey, saveKey, setActiveProvider, getStoredKey, getApiSettings, ApiProvider } from '../services/geminiService';
 
@@ -112,7 +112,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
                   <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Active Provider</label>
                   <div className="grid grid-cols-2 gap-2">
                       <button 
-                          onClick={() => setActiveProv('google')}
+                          onClick={() => setActiveProvider('google')}
                           className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
                           ${activeProv === 'google' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
@@ -121,7 +121,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
                           {activeProv === 'google' && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_5px_blue]"></div>}
                       </button>
                       <button 
-                          onClick={() => setActiveProv('openrouter')}
+                          onClick={() => setActiveProvider('openrouter')}
                           className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
                           ${activeProv === 'openrouter' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
@@ -191,26 +191,50 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
       <section className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
               <Cpu size={14} className="text-[var(--accent)]"/>
-              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">System Defaults</h3>
+              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Image Generation</h3>
           </div>
           <div className="p-4 space-y-5">
-              <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center justify-between">
-                      Image Model Quality
-                      <span className="text-[9px] text-[var(--accent)]">{settings.imageModel === MODEL_IMAGE_PRO ? 'Pro (Slower)' : 'Flash (Fast)'}</span>
-                  </label>
-                  <SegmentedControl 
-                      value={settings.imageModel}
-                      onChange={(v) => update('imageModel', v)}
-                      options={[
-                          { label: 'Standard (Fast)', value: MODEL_IMAGE_FLASH, icon: <Zap size={10}/> },
-                          { label: 'Pro (High Quality)', value: MODEL_IMAGE_PRO, icon: <Star size={10}/> }
-                      ]}
-                  />
-                  <p className="text-[9px] text-[var(--text-muted)]">
-                      {activeProv === 'openrouter' ? "Note: On OpenRouter, 'Standard' uses fast models, 'Pro' uses higher quality models (Flux/Recraft/Pro)." : "Controls Nano Banana Flash vs Pro models."}
-                  </p>
-              </div>
+              
+              {activeProv === 'google' && (
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center justify-between">
+                          Google Model Quality
+                          <span className="text-[9px] text-[var(--accent)]">{settings.imageModel === MODEL_IMAGE_PRO ? 'Pro (Slower)' : 'Flash (Fast)'}</span>
+                      </label>
+                      <SegmentedControl 
+                          value={settings.imageModel}
+                          onChange={(v) => update('imageModel', v)}
+                          options={[
+                              { label: 'Standard (Fast)', value: MODEL_IMAGE_FLASH, icon: <Zap size={10}/> },
+                              { label: 'Pro (High Quality)', value: MODEL_IMAGE_PRO, icon: <Star size={10}/> }
+                          ]}
+                      />
+                  </div>
+              )}
+
+              {activeProv === 'openrouter' && (
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-2">
+                          <Server size={12}/> OpenRouter Image Model
+                      </label>
+                      <div className="relative">
+                          <select 
+                              value={settings.imageModel}
+                              onChange={(e) => update('imageModel', e.target.value)}
+                              className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)] font-bold focus:border-purple-500 focus:outline-none appearance-none cursor-pointer"
+                          >
+                              {OPENROUTER_IMAGE_MODELS.map(m => (
+                                  <option key={m.value} value={m.value}>{m.label}</option>
+                              ))}
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"/>
+                      </div>
+                      <p className="text-[9px] text-[var(--text-muted)] leading-relaxed">
+                          Note: Selecting "Nano Banana" (Google) models while on OpenRouter will attempt to use your stored Google API Key for images (Hybrid Mode).
+                      </p>
+                  </div>
+              )}
+
           </div>
       </section>
 

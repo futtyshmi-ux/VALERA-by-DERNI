@@ -32,8 +32,10 @@ export const getApiSettings = () => {
 };
 
 export const hasValidKey = (): boolean => {
-    const { key } = getApiSettings();
-    return !!(key && key.trim().length > 0);
+    // Check if current provider has key, OR if we have keys at all to let user switch
+    const gKey = getStoredKey('google');
+    const oKey = getStoredKey('openrouter');
+    return !!(gKey || oKey);
 };
 
 export const saveKey = (provider: ApiProvider, key: string) => {
@@ -66,12 +68,12 @@ export const clearApiKey = () => {
     clientInstance = null;
 };
 
-// Helper: Get Google Client (Only used if provider is google)
+// Helper: Get Google Client (Explicitly)
 const getGoogleClient = () => {
   if (clientInstance) return clientInstance;
-  const { key } = getApiSettings();
+  const key = getStoredKey('google');
   
-  if (!key) throw new Error("API Key is missing.");
+  if (!key) throw new Error("Google API Key is missing. Please add it in Settings.");
   
   clientInstance = new GoogleGenAI({ apiKey: key });
   return clientInstance;
@@ -84,14 +86,13 @@ const callOpenRouter = async (
     temperature: number = 0.7,
     jsonMode: boolean = false
 ) => {
-    const { key } = getApiSettings();
+    const key = getStoredKey('openrouter');
+    if (!key) throw new Error("OpenRouter API Key is missing.");
     
-    // Map Gemini Model names to OpenRouter equivalents if needed
-    // If the model starts with 'gemini', OpenRouter usually expects 'google/gemini...'
     let orModel = model;
+    // Basic mapping for Text
     if (model.startsWith('gemini') && !model.includes('/')) {
         orModel = `google/${model}`; 
-        // Fallback for deprecated models mapping if necessary
         if (model.includes('flash')) orModel = 'google/gemini-2.0-flash-001';
         if (model.includes('pro')) orModel = 'google/gemini-2.0-pro-exp-02-05:free';
     }
@@ -323,9 +324,7 @@ export const enhancePrompt = async (userInput: string, assetsContext?: string): 
 
 /**
  * Generate Image
- * Note: OpenRouter assumes using OpenAI 'images/generations' usually, but some models support chat-to-image.
- * For stability, if OpenRouter is selected, we try to use a Flux or similar model if possible, 
- * OR we warn the user if they try to use a Google-specific image model name on OpenRouter.
+ * Supports Hybrid Logic: Can force Google Model usage even when OpenRouter is selected for Text.
  */
 export const generateImage = async (
   prompt: string, 
@@ -336,18 +335,66 @@ export const generateImage = async (
 ): Promise<string> => {
   const { provider } = getApiSettings();
 
+  // HYBRID LOGIC CHECK
+  // If the requested model starts with 'gemini-', we assume user wants Google Native generation.
+  // This allows users to use OpenRouter for Chat but Google for Images (if they provided a Google Key).
+  const isGoogleModel = modelName.startsWith('gemini-');
+  
+  if (isGoogleModel) {
+      // Use Google Native Client
+      const ai = getGoogleClient();
+      const parts: any[] = [];
+
+      if (referenceImages && referenceImages.length > 0) {
+        const processedImages = await Promise.all(referenceImages.map(async (img) => {
+            if (img.startsWith('http')) return await urlToBase64(img);
+            return img;
+        }));
+
+        processedImages.forEach(img => {
+            if (!img) return;
+            const matches = img.match(/^data:(.+);base64,(.+)$/);
+            if (matches) {
+                parts.push({
+                    inlineData: { mimeType: matches[1], data: matches[2] }
+                });
+            }
+        });
+        parts.push({ text: "Using the visual style and subjects from references: " + prompt });
+      } else {
+        parts.push({ text: prompt });
+      }
+
+      const config: any = { imageConfig: { aspectRatio: aspectRatio as any } };
+      
+      try {
+          const response = await retryOperation<GenerateContentResponse>(() => ai.models.generateContent({
+            model: modelName,
+            contents: { parts },
+            config
+          }));
+
+          if (response.candidates?.[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData?.data) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
+            }
+          }
+          throw new Error("No image data returned from Gemini.");
+      } catch (error: any) {
+          if (error.message?.includes('429')) throw new Error("API Quota Limit (429).");
+          throw error;
+      }
+  }
+
   // Handle Images via OpenRouter (Experimental/Standard OpenAI API)
   if (provider === 'openrouter') {
-      // For OpenRouter, we typically use a different endpoint for images (standard OpenAI format)
-      // Or we use a specific model that supports it.
-      // Since Valera uses "gemini-2.5-flash-image", we map this to a high quality text-to-image on OpenRouter
-      // OR we use the Google model via OpenRouter if it supports image output (usually returned as URL).
-      
-      const { key } = getApiSettings();
-      // Using FLUX via OpenRouter/OpenAI standard as fallback for high quality
-      // Or recraft, etc.
-      // Let's use `black-forest-labs/flux-1-schnell` as a fast equivalent to Flash Image
-      const orImageModel = 'black-forest-labs/flux-1-schnell'; 
+      const key = getStoredKey('openrouter');
+      if (!key) throw new Error("OpenRouter Key Missing");
+
+      // Use the selected model (e.g. 'black-forest-labs/flux-1-schnell')
+      const orImageModel = modelName || 'black-forest-labs/flux-1-schnell'; 
 
       try {
           const response = await fetch("https://openrouter.ai/api/v1/images/generations", {
@@ -362,7 +409,8 @@ export const generateImage = async (
                   model: orImageModel,
                   prompt: prompt,
                   size: "1024x1024", // Flux usually handles standard sizes
-                  response_format: "b64_json" // We need base64
+                  // Note: OpenRouter Image API param names might vary per model, but this is OpenAI standard
+                  response_format: "b64_json" 
               })
           });
 
@@ -376,7 +424,6 @@ export const generateImage = async (
               const b64 = data.data[0].b64_json;
               if (b64) return `data:image/png;base64,${b64}`;
               if (data.data[0].url) {
-                  // If URL returned, fetch and convert
                   return await urlToBase64(data.data[0].url);
               }
           }
@@ -386,52 +433,9 @@ export const generateImage = async (
           throw e;
       }
   }
-
-  // --- GOOGLE NATIVE ---
-  const ai = getGoogleClient();
-  const parts: any[] = [];
-
-  if (referenceImages && referenceImages.length > 0) {
-    const processedImages = await Promise.all(referenceImages.map(async (img) => {
-        if (img.startsWith('http')) return await urlToBase64(img);
-        return img;
-    }));
-
-    processedImages.forEach(img => {
-        if (!img) return;
-        const matches = img.match(/^data:(.+);base64,(.+)$/);
-        if (matches) {
-            parts.push({
-                inlineData: { mimeType: matches[1], data: matches[2] }
-            });
-        }
-    });
-    parts.push({ text: "Using the visual style and subjects from references: " + prompt });
-  } else {
-    parts.push({ text: prompt });
-  }
-
-  const config: any = { imageConfig: { aspectRatio: aspectRatio as any } };
   
-  try {
-      const response = await retryOperation<GenerateContentResponse>(() => ai.models.generateContent({
-        model: modelName,
-        contents: { parts },
-        config
-      }));
-
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData?.data) {
-                return `data:image/png;base64,${part.inlineData.data}`;
-            }
-        }
-      }
-      throw new Error("No image data returned from Gemini.");
-  } catch (error: any) {
-      if (error.message?.includes('429')) throw new Error("API Quota Limit (429).");
-      throw error;
-  }
+  // Fallback (Should not reach here if keys properly managed)
+  throw new Error("Invalid Provider Configuration");
 };
 
 export const generateVoiceDirection = async (dialogue: string, sceneDescription: string): Promise<string> => {
