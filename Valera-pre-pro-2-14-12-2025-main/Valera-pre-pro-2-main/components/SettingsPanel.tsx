@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { AppSettings } from '../types';
 import { THEME_PRESETS, APP_FONTS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO } from '../constants';
-import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key, Globe, Server } from 'lucide-react';
-import { clearApiKey, hasValidKey, saveApiSettings, getApiSettings, ApiProvider } from '../services/geminiService';
+import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key, Globe, Server, Save } from 'lucide-react';
+import { clearApiKey, hasValidKey, saveKey, setActiveProvider, getStoredKey, getApiSettings, ApiProvider } from '../services/geminiService';
 
 interface Props {
   settings: AppSettings;
@@ -20,16 +20,15 @@ interface Props {
 }
 
 export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDrive, isDriveConnected }) => {
-  const [localKey, setLocalKey] = useState('');
-  const [provider, setProvider] = useState<ApiProvider>('google');
+  const [googleKey, setGoogleKey] = useState('');
+  const [orKey, setOrKey] = useState('');
+  const [activeProv, setActiveProv] = useState<ApiProvider>('google');
 
-  // Load provider on mount
+  // Load provider keys on mount
   useEffect(() => {
-      const current = getApiSettings();
-      setProvider(current.provider);
-      // We don't load the key back into the input for security visual reasons usually, 
-      // but if you want to edit it, we can populate it.
-      if (current.key) setLocalKey(current.key);
+      setGoogleKey(getStoredKey('google'));
+      setOrKey(getStoredKey('openrouter'));
+      setActiveProv(getApiSettings().provider);
   }, []);
 
   const update = (key: keyof AppSettings, value: any) => {
@@ -37,23 +36,14 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
   };
 
   const handleSaveApi = () => {
-      if (localKey.trim().length > 5) {
-          saveApiSettings(localKey, provider);
-          // Reload to apply singleton changes
-          window.location.reload();
-      } else {
-          // Just saving provider if key is empty (assuming key exists)
-          if (hasValidKey()) {
-              saveApiSettings('', provider); // Empty key means keep existing in storage
-              window.location.reload();
-          } else {
-              alert("Please enter a valid API Key");
-          }
-      }
+      saveKey('google', googleKey);
+      saveKey('openrouter', orKey);
+      setActiveProvider(activeProv);
+      window.location.reload();
   };
 
   const handleClearKey = () => {
-      if (window.confirm("Are you sure you want to remove the API Key? You will need to enter it again to use Valera.")) {
+      if (window.confirm("Are you sure you want to remove ALL API Keys? You will need to enter them again to use Valera.")) {
           clearApiKey();
           window.location.reload();
       }
@@ -109,70 +99,91 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
           </div>
       </section>
 
-      {/* 2. API & PROVIDER SETTINGS (NEW) */}
+      {/* 2. API & PROVIDER SETTINGS (SEPARATE INPUTS) */}
       <section className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center gap-2">
               <Server size={14} className="text-[var(--accent)]"/>
-              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">AI Provider & Key</h3>
+              <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">AI Provider & Keys</h3>
           </div>
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-5">
               
-              {/* Provider Selection */}
+              {/* Active Provider Toggle */}
               <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Service Provider</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Active Provider</label>
                   <div className="grid grid-cols-2 gap-2">
                       <button 
-                          onClick={() => setProvider('google')}
-                          className={`p-3 rounded-lg border text-left transition-all ${provider === 'google' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                          onClick={() => setActiveProv('google')}
+                          className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
+                          ${activeProv === 'google' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
                           <div className="flex items-center gap-2 mb-1"><Globe size={14}/> <span className="font-bold text-xs">Google Native</span></div>
-                          <div className="text-[9px] opacity-70">Official SDK. Requires VPN in some regions. Best for native Gemini features.</div>
+                          <div className="text-[9px] opacity-70">Official SDK. Best performance.</div>
+                          {activeProv === 'google' && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_5px_blue]"></div>}
                       </button>
                       <button 
-                          onClick={() => setProvider('openrouter')}
-                          className={`p-3 rounded-lg border text-left transition-all ${provider === 'openrouter' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                          onClick={() => setActiveProv('openrouter')}
+                          className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
+                          ${activeProv === 'openrouter' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
                           <div className="flex items-center gap-2 mb-1"><Server size={14}/> <span className="font-bold text-xs">OpenRouter</span></div>
-                          <div className="text-[9px] opacity-70">Proxy service. Works globally. Supports Gemini + Flux for images.</div>
+                          <div className="text-[9px] opacity-70">Proxy. Works globally.</div>
+                          {activeProv === 'openrouter' && <div className="absolute top-2 right-2 w-2 h-2 bg-purple-500 rounded-full shadow-[0_0_5px_purple]"></div>}
                       </button>
                   </div>
               </div>
 
-              {/* API Key Input */}
+              <div className="w-full h-px bg-[var(--border-color)] opacity-50"></div>
+
+              {/* Google Key Input */}
               <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
-                      {provider === 'google' ? 'Google AI Studio Key' : 'OpenRouter API Key'}
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-2">
+                      <Globe size={12}/> Google AI Studio Key
                   </label>
-                  <div className="flex gap-2">
-                      <div className="relative flex-1">
-                          <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/>
-                          <input 
-                              type="password" 
-                              value={localKey}
-                              onChange={(e) => setLocalKey(e.target.value)}
-                              placeholder={provider === 'google' ? "AIzaSy..." : "sk-or-v1..."}
-                              className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg pl-9 pr-3 py-2 text-xs text-[var(--text-main)] focus:border-[var(--accent)] focus:outline-none"
-                          />
-                      </div>
-                      <button 
-                          onClick={handleSaveApi}
-                          className="px-4 bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 rounded-lg text-xs font-bold uppercase"
-                      >
-                          Save & Reload
-                      </button>
+                  <div className="relative">
+                      <input 
+                          type="password" 
+                          value={googleKey}
+                          onChange={(e) => setGoogleKey(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg pl-3 pr-3 py-2.5 text-xs text-[var(--text-main)] focus:border-blue-500 focus:outline-none transition-colors"
+                      />
                   </div>
-                  <p className="text-[9px] text-[var(--text-muted)]">
-                      Keys are stored locally in your browser. {provider === 'openrouter' ? 'Get key at openrouter.ai' : 'Get key at aistudio.google.com'}
-                  </p>
               </div>
 
-              {hasValidKey() && (
-                  <div className="pt-2">
-                      <button onClick={handleClearKey} className="text-red-500 hover:text-red-400 text-[10px] font-bold uppercase flex items-center gap-1">
-                          <LogOut size={12}/> Remove stored key
-                      </button>
+              {/* OpenRouter Key Input */}
+              <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase flex items-center gap-2">
+                      <Server size={12}/> OpenRouter Key
+                  </label>
+                  <div className="relative">
+                      <input 
+                          type="password" 
+                          value={orKey}
+                          onChange={(e) => setOrKey(e.target.value)}
+                          placeholder="sk-or-v1..."
+                          className="w-full bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg pl-3 pr-3 py-2.5 text-xs text-[var(--text-main)] focus:border-purple-500 focus:outline-none transition-colors"
+                      />
                   </div>
-              )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-2">
+                  {hasValidKey() && (
+                      <button onClick={handleClearKey} className="px-4 py-2 text-red-500 hover:text-red-400 text-[10px] font-bold uppercase border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors">
+                          <LogOut size={14} className="inline mr-2"/> Reset Keys
+                      </button>
+                  )}
+                  <button 
+                      onClick={handleSaveApi}
+                      className="px-6 py-2 bg-[var(--accent)] text-[var(--accent-text)] hover:brightness-110 rounded-lg text-xs font-bold uppercase shadow-lg flex items-center gap-2"
+                  >
+                      <Save size={14}/> Save & Reload
+                  </button>
+              </div>
+              
+              <p className="text-[9px] text-[var(--text-muted)] text-center">
+                  Keys are stored securely in your browser's local storage.
+              </p>
           </div>
       </section>
 
@@ -197,7 +208,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
                       ]}
                   />
                   <p className="text-[9px] text-[var(--text-muted)]">
-                      {provider === 'openrouter' ? "Note: On OpenRouter, 'Standard' uses fast models, 'Pro' uses higher quality models (Flux/Recraft/Pro)." : "Controls Nano Banana Flash vs Pro models."}
+                      {activeProv === 'openrouter' ? "Note: On OpenRouter, 'Standard' uses fast models, 'Pro' uses higher quality models (Flux/Recraft/Pro)." : "Controls Nano Banana Flash vs Pro models."}
                   </p>
               </div>
           </div>

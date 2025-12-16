@@ -8,41 +8,61 @@ export type ApiProvider = 'google' | 'openrouter';
 // Singleton instance for Google SDK
 let clientInstance: GoogleGenAI | null = null;
 
-const STORAGE_KEY = 'valera_api_key';
+const STORAGE_KEY_GOOGLE = 'valera_api_key_google';
+const STORAGE_KEY_OPENROUTER = 'valera_api_key_openrouter';
+const STORAGE_KEY_LEGACY = 'valera_api_key'; // Backward compatibility
 const PROVIDER_KEY = 'valera_api_provider';
 
 // --- API KEY & PROVIDER MANAGEMENT ---
 
-export const hasValidKey = (): boolean => {
-    const envKey = process.env.API_KEY;
-    const localKey = localStorage.getItem(STORAGE_KEY);
-    return !!((envKey && envKey.trim().length > 0) || (localKey && localKey.trim().length > 0));
+export const getStoredKey = (provider: ApiProvider): string => {
+    if (provider === 'google') {
+        return localStorage.getItem(STORAGE_KEY_GOOGLE) || localStorage.getItem(STORAGE_KEY_LEGACY) || process.env.API_KEY || '';
+    }
+    if (provider === 'openrouter') {
+        return localStorage.getItem(STORAGE_KEY_OPENROUTER) || '';
+    }
+    return '';
 };
 
-export const saveApiSettings = (key: string, provider: ApiProvider) => {
-    if (key && key.trim().length > 0) {
-        localStorage.setItem(STORAGE_KEY, key.trim());
+export const getApiSettings = () => {
+    const provider = (localStorage.getItem(PROVIDER_KEY) as ApiProvider) || 'google';
+    const key = getStoredKey(provider);
+    return { key, provider };
+};
+
+export const hasValidKey = (): boolean => {
+    const { key } = getApiSettings();
+    return !!(key && key.trim().length > 0);
+};
+
+export const saveKey = (provider: ApiProvider, key: string) => {
+    const cleanKey = key.trim();
+    if (provider === 'google') {
+        localStorage.setItem(STORAGE_KEY_GOOGLE, cleanKey);
+        // Clear legacy to avoid confusion if new key is set
+        if (cleanKey) localStorage.removeItem(STORAGE_KEY_LEGACY); 
+    } else {
+        localStorage.setItem(STORAGE_KEY_OPENROUTER, cleanKey);
     }
+    clientInstance = null;
+};
+
+export const setActiveProvider = (provider: ApiProvider) => {
     localStorage.setItem(PROVIDER_KEY, provider);
-    
-    // Reset instance to force re-init
     clientInstance = null;
 };
 
 export const saveApiKey = (key: string) => {
-    saveApiSettings(key, 'google');
-};
-
-export const getApiSettings = () => {
-    return {
-        key: localStorage.getItem(STORAGE_KEY) || process.env.API_KEY || '',
-        provider: (localStorage.getItem(PROVIDER_KEY) as ApiProvider) || 'google'
-    };
+    // Default fallback for simple login screen (assumes Google)
+    saveKey('google', key);
+    setActiveProvider('google');
 };
 
 export const clearApiKey = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(PROVIDER_KEY);
+    localStorage.removeItem(STORAGE_KEY_GOOGLE);
+    localStorage.removeItem(STORAGE_KEY_OPENROUTER);
+    localStorage.removeItem(STORAGE_KEY_LEGACY);
     clientInstance = null;
 };
 
