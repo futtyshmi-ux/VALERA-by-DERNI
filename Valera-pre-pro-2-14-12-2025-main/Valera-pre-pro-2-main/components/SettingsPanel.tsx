@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { AppSettings } from '../types';
 import { THEME_PRESETS, APP_FONTS, MODEL_IMAGE_FLASH, MODEL_IMAGE_PRO, OPENROUTER_IMAGE_MODELS } from '../constants';
 import { Palette, Type, Cpu, Zap, Star, CheckCircle, Cloud, MessageSquare, ChevronDown, Check, LogOut, Key, Globe, Server, Save } from 'lucide-react';
-import { clearApiKey, hasValidKey, saveKey, setActiveProvider, getStoredKey, getApiSettings, ApiProvider } from '../services/geminiService';
+import { clearApiKey, hasValidKey, saveKey, setActiveProvider as setGlobalProvider, getStoredKey, getApiSettings, ApiProvider } from '../services/geminiService';
 
 interface Props {
   settings: AppSettings;
@@ -35,10 +35,27 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
     onUpdate({ ...settings, [key]: value });
   };
 
+  const handleProviderSwitch = (provider: ApiProvider) => {
+      setActiveProv(provider);
+      // Smart Switch: Default to a valid model for the selected provider
+      if (provider === 'google') {
+          // If current is not a google model, reset to Flash
+          if (settings.imageModel !== MODEL_IMAGE_FLASH && settings.imageModel !== MODEL_IMAGE_PRO) {
+              update('imageModel', MODEL_IMAGE_FLASH);
+          }
+      } else {
+          // If current is not in OpenRouter list (and not a hybrid one), default to Flux
+          const isValid = OPENROUTER_IMAGE_MODELS.some(m => m.value === settings.imageModel);
+          if (!isValid) {
+              update('imageModel', OPENROUTER_IMAGE_MODELS[0].value);
+          }
+      }
+  };
+
   const handleSaveApi = () => {
       saveKey('google', googleKey);
       saveKey('openrouter', orKey);
-      setActiveProvider(activeProv);
+      setGlobalProvider(activeProv);
       window.location.reload();
   };
 
@@ -112,7 +129,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
                   <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Active Provider</label>
                   <div className="grid grid-cols-2 gap-2">
                       <button 
-                          onClick={() => setActiveProvider('google')}
+                          onClick={() => handleProviderSwitch('google')}
                           className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
                           ${activeProv === 'google' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
@@ -121,7 +138,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onUpdate, onConnectDr
                           {activeProv === 'google' && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_5px_blue]"></div>}
                       </button>
                       <button 
-                          onClick={() => setActiveProvider('openrouter')}
+                          onClick={() => handleProviderSwitch('openrouter')}
                           className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden
                           ${activeProv === 'openrouter' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-[var(--bg-input)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                       >
