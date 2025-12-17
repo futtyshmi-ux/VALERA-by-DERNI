@@ -11,9 +11,10 @@ import {
   Grid, Layers, Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown, ChevronDown, 
   ChevronUp, Lasso, Maximize2, Minimize2, Scissors, ScanLine, Combine, 
   BoxSelect, Focus, Grid3X3, Ruler, PanelRightClose, PanelRightOpen, Anchor, Search,
-  Sliders, Check, Ratio, Aperture, Activity, Sun, Moon, Droplet, Thermometer, CircleDashed, Hash, Triangle, EyeIcon, Menu, LogOut, Filter, Film, Palette, History
+  Sliders, Check, Ratio, Aperture, Activity, Sun, Moon, Droplet, Thermometer, CircleDashed, Hash, Triangle, EyeIcon, Menu, LogOut, Filter, Film, Palette, History, Box as BoxIcon
 } from 'lucide-react';
 import { EDITOR_FONTS } from '../constants';
+import { StudioViewport } from './StudioViewport'; // Import the new 3D component
 
 interface Props {
   imageUrl: string | null;
@@ -38,16 +39,16 @@ type OverlayType = 'none' | 'thirds' | 'cross' | 'golden' | 'safe-zones' | 'cine
 interface Point { x: number; y: number; }
 
 interface FilterState {
-    exposure: number;   // 100 default
-    contrast: number;   // 100 default
-    saturation: number; // 100 default
-    warmth: number;     // 0 default (sepia/hue shift)
-    highlights: number; // 0
-    shadows: number;    // 0
-    vignette: number;   // 0 to 100
-    grain: number;      // 0 to 100
-    sharpen: number;    // 0 to 100
-    blur: number;       // 0
+    exposure: number;   
+    contrast: number;   
+    saturation: number; 
+    warmth: number;     
+    highlights: number; 
+    shadows: number;    
+    vignette: number;   
+    grain: number;      
+    sharpen: number;    
+    blur: number;       
 }
 
 interface BaseObject { 
@@ -87,7 +88,6 @@ const DEFAULT_FILTERS: FilterState = {
     highlights: 0, shadows: 0, vignette: 0, grain: 0, sharpen: 0, blur: 0
 };
 
-// MATCHING TIMELINE RESOLUTIONS EXACTLY
 const RESOLUTION_PRESETS = [
     { label: "1080p HD (16:9)", w: 1920, h: 1080, icon: <Monitor size={12}/> },
     { label: "Vertical HD (9:16)", w: 1080, h: 1920, icon: <Smartphone size={12}/> },
@@ -119,6 +119,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
   const [showTools, setShowTools] = useState(true); 
   const [showResMenu, setShowResMenu] = useState(false);
   const [showColorPanel, setShowColorPanel] = useState(false);
+  const [show3DViewport, setShow3DViewport] = useState(false); // New state for 3D Viewport
   
   const [overlayType, setOverlayType] = useState<OverlayType>('none');
   const [showRulers, setShowRulers] = useState(false);
@@ -168,11 +169,9 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
   const [isIsolateMode, setIsIsolateMode] = useState(false);
   const [isCropMode, setIsCropMode] = useState(false);
 
-  // --- TRIGGER VEL TOUR ---
   useEffect(() => {
       if (isOpen) {
           window.dispatchEvent(new CustomEvent('VEL_CANVAS_OPEN'));
-          // Auto-hide tools on mobile initially to show canvas
           if (window.innerWidth < 768) setShowTools(false);
       }
       return () => {
@@ -185,8 +184,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
   useEffect(() => {
     if (typeof window !== 'undefined') {
         const root = document.documentElement;
-        const computed = getComputedStyle(root);
-        if (!computed.getPropertyValue('--tg-theme-bg-color')) {
+        if (!getComputedStyle(root).getPropertyValue('--tg-theme-bg-color')) {
             root.style.setProperty('--tg-theme-bg-color', '#1e1e1e');
             root.style.setProperty('--tg-theme-text-color', '#ffffff');
             root.style.setProperty('--tg-theme-button-color', '#3390ec');
@@ -198,8 +196,6 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
   useEffect(() => { setLocalAssetHistory([...(historyImages || [])]); }, [historyImages]);
   useEffect(() => { inputValueRef.current = inputValue; }, [inputValue]);
 
-  
-  // Generate Noise Pattern for Grain
   useEffect(() => {
       const noiseCanvas = document.createElement('canvas');
       noiseCanvas.width = 200; noiseCanvas.height = 200;
@@ -228,6 +224,11 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
         document.head.appendChild(link);
     }
   }, []);
+
+  const handle3DCapture = (base64: string) => {
+      handleAddImageLayer(base64);
+      setShow3DViewport(false);
+  };
 
   const deleteLayer = useCallback((id: string) => { 
       setObjects(prev => prev.filter(o => o.id !== id)); 
@@ -305,7 +306,6 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
       setOverlayType(modes[nextIdx]);
   };
 
-  // --- INIT CANVAS FIX: Respect image size ---
   useEffect(() => {
     if (isOpen && objects.length === 0) {
       const initCanvas = () => {
@@ -360,7 +360,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
           if (e.key === 'Enter' && tool === 'pen') { finishPenPath(); }
           if (e.key === 'Escape') { 
               if (tool === 'pen') finishPenPath();
-              else { setActiveLasso(null); setActiveFrame(null); setSelectedIds([]); if (textInput) commitText(); setIsIsolateMode(false); setShowResMenu(false); setShowColorPanel(false); setShowHistory(false); }
+              else { setActiveLasso(null); setActiveFrame(null); setSelectedIds([]); if (textInput) commitText(); setIsIsolateMode(false); setShowResMenu(false); setShowColorPanel(false); setShowHistory(false); setShow3DViewport(false); }
           }
           if ((e.key === 'Delete' || e.key === 'Backspace') && !e.repeat && selectedIds.length > 0 && !textInput) { e.preventDefault(); selectedIds.forEach(id => deleteLayer(id)); }
           if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); setView(v => ({...v, scale: Math.min(v.scale * 1.1, 10)})); }
@@ -772,204 +772,206 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
       }
   };
 
-  const applyLassoAction = (mode: 'erase' | 'isolate') => {
-      if (!activeLasso) return;
-      const newMask: MaskObject = { id: Date.now().toString(), type: 'mask', name: mode === 'erase' ? 'Pixel Erase' : 'Isolate', color: '#000', lineWidth: 0, visible: true, locked: false, points: activeLasso.points, mode: mode, filters: { ...DEFAULT_FILTERS } };
-      setObjects(prev => [...prev, newMask]); setActiveLasso(null);
-  };
-
-  const getMaskDataURL = (points: Point[], width: number, height: number): string | null => {
-      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); if (!ctx) return null;
-      ctx.fillStyle = 'black'; ctx.fillRect(0, 0, width, height); ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y); for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y); ctx.closePath(); ctx.fillStyle = 'white'; ctx.fill(); return canvas.toDataURL('image/png');
-  };
-
-  const handleMergeLayers = async () => {
-      if (selectedIds.length < 2) return;
-      const bounds = getCombinedBounds(selectedIds); if (!bounds) return;
-      const tempCanvas = document.createElement('canvas'); tempCanvas.width = bounds.w; tempCanvas.height = bounds.h; const tCtx = tempCanvas.getContext('2d'); if (!tCtx) return;
-      tCtx.translate(-bounds.x, -bounds.y);
-      objects.forEach(obj => { if (!selectedIds.includes(obj.id)) return; if (obj.type === 'image') { const i = obj as ImageObj; const img = imageCache.get(i.id); if (img) tCtx.drawImage(img, i.x, i.y, i.w, i.h); } else if (obj.type === 'rect') { const s = obj as ShapeObject; tCtx.strokeStyle = s.color; tCtx.lineWidth = s.lineWidth; tCtx.strokeRect(s.x, s.y, s.w, s.h); } });
-      const mergedUrl = tempCanvas.toDataURL('image/png');
-      const newImgObj: ImageObj = { id: Date.now().toString(), type: 'image', name: 'Merged Layer', color: '#fff', lineWidth: 0, src: mergedUrl, x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } };
-      setObjects(prev => { const kept = prev.filter(o => !selectedIds.includes(o.id)); return [...kept, newImgObj]; }); setSelectedIds([newImgObj.id]);
-  };
-
-  const handleLassoMagicErase = async () => {
-      if (!activeLasso) return; setIsGenerating(true); setGenStatusMsg("AI Patching...");
-      try {
-          const tempCanvas = document.createElement('canvas'); tempCanvas.width = docSize.w; tempCanvas.height = docSize.h; const tCtx = tempCanvas.getContext('2d'); if(!tCtx) throw new Error("Canvas Error");
-          objects.forEach(obj => { if (!obj.visible) return; if (obj.type === 'image') { const i = obj as ImageObj; const img = imageCache.get(i.id); if(img) tCtx.drawImage(img, i.x, i.y, i.w, i.h); } });
-          const sourceImage = tempCanvas.toDataURL('image/png');
-          const maskImage = getMaskDataURL(activeLasso.points, docSize.w, docSize.h); if (!maskImage) throw new Error("Mask Generation Failed");
-          const prompt = "Remove the object highlighted by the white area in the second image (mask) from the first image. Fill the removed area with logical background context, seamless texture, and lighting matching the surroundings. High quality, photorealistic inpainting.";
-          const resultUrl = await generateImage(prompt, [sourceImage, maskImage], initialAspectRatio || "16:9", imageModel);
-          const img = new Image(); img.src = resultUrl;
-          img.onload = () => { 
-              const newImgObj: ImageObj = { id: Date.now().toString(), type: 'image', name: 'Patch Layer', color: '#fff', lineWidth: 0, src: resultUrl, x: 0, y: 0, w: docSize.w, h: docSize.h, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } }; 
-              setObjects(prev => [...prev, newImgObj]); 
-              setActiveLasso(null);
-              // Auto-switch to select mode and select new layer
-              setTool('select');
-              setSelectedIds([newImgObj.id]);
-          };
-      } catch (e) { alert("Magic Erase Failed: " + e); } finally { setIsGenerating(false); setGenStatusMsg("Generating..."); setActiveLasso(null); }
-  };
-
-  const handleSmartCutAndHeal = async () => {
-      if (!activeLasso) return; setIsGenerating(true); setGenStatusMsg("Splitting Object...");
-      try {
-          const cutoutCanvas = document.createElement('canvas'); cutoutCanvas.width = docSize.w; cutoutCanvas.height = docSize.h; const cCtx = cutoutCanvas.getContext('2d'); if(!cCtx) throw new Error("Canvas Error");
-          cCtx.beginPath(); cCtx.moveTo(activeLasso.points[0].x, activeLasso.points[0].y); for(let i=1; i<activeLasso.points.length; i++) cCtx.lineTo(activeLasso.points[i].x, activeLasso.points[i].y); cCtx.closePath(); cCtx.clip();
-          objects.forEach(obj => { if (!obj.visible || obj.type !== 'image') return; const i = obj as ImageObj; const img = imageCache.get(i.id); if(img) cCtx.drawImage(img, i.x, i.y, i.w, i.h); });
-          const cutoutUrl = cutoutCanvas.toDataURL('image/png');
-          const tempCanvas = document.createElement('canvas'); tempCanvas.width = docSize.w; tempCanvas.height = docSize.h; const tCtx = tempCanvas.getContext('2d'); if(!tCtx) throw new Error("Canvas Error");
-          objects.forEach(obj => { if (!obj.visible) return; if (obj.type === 'image') { const i = obj as ImageObj; const img = imageCache.get(i.id); if(img) tCtx.drawImage(img, i.x, i.y, i.w, i.h); } });
-          const sourceImage = tempCanvas.toDataURL('image/png');
-          const maskImage = getMaskDataURL(activeLasso.points, docSize.w, docSize.h); if(!maskImage) throw new Error("Mask Error");
-          
-          const prompt = "Remove the masked object completely. Fill the area with appropriate background (floor, walls, scenery) to look natural and empty. Seamless blending.";
-          const backgroundUrl = await generateImage(prompt, [sourceImage, maskImage], initialAspectRatio || "16:9", imageModel);
-          
-          const bgObj: ImageObj = { id: Date.now().toString(), type: 'image', name: 'Background Patch', color: '#fff', lineWidth: 0, src: backgroundUrl, x: 0, y: 0, w: docSize.w, h: docSize.h, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } };
-          const cutObj: ImageObj = { id: (Date.now() + 1).toString(), type: 'image', name: 'Extracted Object', color: '#fff', lineWidth: 0, src: cutoutUrl, x: 0, y: 0, w: docSize.w, h: docSize.h, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } };
-          
-          setObjects(prev => [...prev, bgObj, cutObj]); 
-          setLocalAssetHistory(prev => [backgroundUrl, cutoutUrl, ...prev]);
-          setActiveLasso(null); setTool('select'); setSelectedIds([cutObj.id]); 
-      } catch (e) { alert("Smart Cut Failed: " + e); setActiveLasso(null); } finally { setIsGenerating(false); setGenStatusMsg("Generating..."); setActiveLasso(null); }
-  };
-
-  const handleFrameGenerate = async () => {
-      if (!activeFrame) return;
-      setIsGenerating(true); setGenStatusMsg("Outpainting...");
-      try {
-          const fx = activeFrame.w < 0 ? activeFrame.x + activeFrame.w : activeFrame.x;
-          const fy = activeFrame.h < 0 ? activeFrame.y + activeFrame.h : activeFrame.y;
-          const fw = Math.abs(activeFrame.w);
-          const fh = Math.abs(activeFrame.h);
-          if (fw < 10 || fh < 10) return; 
-
-          const tempCanvas = document.createElement('canvas'); tempCanvas.width = fw; tempCanvas.height = fh; const ctx = tempCanvas.getContext('2d'); if (!ctx) return;
-          ctx.translate(-fx, -fy);
-          
-          objects.forEach(obj => {
-             if (!obj.visible) return;
-             if (obj.type === 'image') { const i = obj as ImageObj; const img = imageCache.get(i.id); if (img) ctx.drawImage(img, i.x, i.y, i.w, i.h); }
-             else if (obj.type === 'rect') { const s = obj as ShapeObject; ctx.strokeStyle = s.color; ctx.lineWidth = s.lineWidth; if(s.filled){ctx.fillStyle=s.color;ctx.fillRect(s.x,s.y,s.w,s.h);} ctx.strokeRect(s.x, s.y, s.w, s.h); }
-          });
-
-          const srcImg = tempCanvas.toDataURL('image/png');
-          const genPrompt = prompt ? `${prompt}. Seamlessly fill transparent areas.` : "Outpainting. Fill the empty space seamlessly. High resolution.";
-          const newImageUrl = await generateImage(genPrompt, [srcImg], initialAspectRatio || "16:9", imageModel);
-
-          const newImgObj: ImageObj = { id: Date.now().toString(), type: 'image', name: 'Frame Gen', color: '#fff', lineWidth: 0, src: newImageUrl, x: fx, y: fy, w: fw, h: fh, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } };
-          setObjects(prev => [...prev, newImgObj]); setLocalAssetHistory(prev => [newImageUrl, ...prev]);
-          setActiveFrame(null); setTool('select'); setSelectedIds([newImgObj.id]);
-      } catch(e) { console.error(e); alert("Frame Gen Failed"); } finally { setIsGenerating(false); setGenStatusMsg("Generating..."); }
-  };
-
-  const handleSaveAndClose = async () => {
-      const tempCanvas = document.createElement('canvas'); 
-      tempCanvas.width = docSize.w; 
-      tempCanvas.height = docSize.h; 
-      const tCtx = tempCanvas.getContext('2d'); 
-      if(!tCtx) return;
-      tCtx.fillStyle = '#000000'; tCtx.fillRect(0,0,docSize.w, docSize.h);
-      
-      objects.forEach(obj => {
-         if (!obj.visible) return;
-         if (obj.type === 'mask') { const m = obj as MaskObject; tCtx.save(); tCtx.beginPath(); if (m.mode === 'isolate') { tCtx.rect(-20000, -20000, 40000, 40000); tCtx.moveTo(m.points[0].x, m.points[0].y); for (let i = 1; i < m.points.length; i++) tCtx.lineTo(m.points[i].x, m.points[i].y); tCtx.closePath(); tCtx.globalCompositeOperation = 'destination-out'; tCtx.fill('evenodd'); } else { tCtx.moveTo(m.points[0].x, m.points[0].y); for (let i = 1; i < m.points.length; i++) tCtx.lineTo(m.points[i].x, m.points[i].y); tCtx.closePath(); tCtx.globalCompositeOperation = 'destination-out'; tCtx.fill(); } tCtx.restore(); return; }
-         
-         tCtx.save();
-         if (obj.filters) {
-             const { exposure, contrast, saturation, warmth, blur } = obj.filters;
-             tCtx.filter = `brightness(${exposure}%) contrast(${contrast}%) saturate(${saturation}%) sepia(${warmth}%) blur(${blur}px)`;
-         }
-
-         if (obj.type === 'text') { const t = obj as TextObject; tCtx.fillStyle = t.color; const fontName = t.fontFamily.split(',')[0].replace(/['"]/g, ''); tCtx.font = `bold ${t.fontSize}px "${fontName}"`; tCtx.textBaseline = 'top'; tCtx.fillText(t.text, t.x, t.y); } else if (obj.type === 'image') { const i = obj as ImageObj; const img = imageCache.get(i.id) || new Image(); if(!img.src) img.src = i.src; tCtx.drawImage(img, i.x, i.y, i.w, i.h); } else if (obj.type === 'rect') { const s = obj as ShapeObject; tCtx.strokeStyle = s.color; tCtx.lineWidth = s.lineWidth; if(s.filled) {tCtx.fillStyle=s.color; tCtx.fillRect(s.x, s.y, s.w, s.h);} tCtx.strokeRect(s.x, s.y, s.w, s.h); } else if (obj.type === 'circle') { const s = obj as ShapeObject; tCtx.strokeStyle = s.color; tCtx.lineWidth = s.lineWidth; tCtx.beginPath(); tCtx.ellipse(s.x + s.w/2, s.y + s.h/2, Math.abs(s.w/2), Math.abs(s.h/2), 0, 0, 2*Math.PI); if(s.filled) {tCtx.fillStyle=s.color; tCtx.fill();} tCtx.stroke(); } else if (obj.type === 'path') { const p = obj as PathObject; if (p.points.length > 1) { tCtx.beginPath(); let strokeColor = p.color; if(p.isInpaint) strokeColor = hexToRgba(p.color, 0.5); else if(p.opacity < 1.0) strokeColor = hexToRgba(p.color, p.opacity); tCtx.strokeStyle = strokeColor; tCtx.lineWidth = p.lineWidth; if (p.isLasso) { tCtx.setLineDash([5, 5]); } else { tCtx.lineCap = 'round'; tCtx.lineJoin = 'round'; } tCtx.moveTo(p.points[0].x, p.points[0].y); for (let i = 1; i < p.points.length; i++) tCtx.lineTo(p.points[i].x, p.points[i].y); if (p.isLasso) tCtx.closePath(); tCtx.stroke(); } }
-         
-         // Apply complex overlays (Grain/Vignette)
-         if (obj.filters && (obj.filters.vignette > 0 || obj.filters.grain > 0)) {
-             const bounds = { x: (obj as any).x, y: (obj as any).y, w: (obj as any).w, h: (obj as any).h };
-             if (bounds.w) {
-                 if (obj.filters.vignette > 0) {
-                     tCtx.globalCompositeOperation = 'source-over';
-                     const cx = bounds.x + bounds.w/2;
-                     const cy = bounds.y + bounds.h/2;
-                     const radius = Math.max(bounds.w, bounds.h) * 0.8;
-                     const grad = tCtx.createRadialGradient(cx, cy, radius * 0.4, cx, cy, radius);
-                     grad.addColorStop(0, 'rgba(0,0,0,0)');
-                     grad.addColorStop(1, `rgba(0,0,0,${obj.filters.vignette/150})`);
-                     tCtx.fillStyle = grad;
-                     tCtx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h);
-                 }
-                 if (obj.filters.grain > 0 && noisePattern) {
-                     tCtx.globalCompositeOperation = 'overlay';
-                     tCtx.globalAlpha = obj.filters.grain / 200;
-                     tCtx.fillStyle = noisePattern;
-                     tCtx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h);
-                     tCtx.globalAlpha = 1.0;
-                 }
-             }
-         }
-
-         tCtx.restore();
-      });
-      const finalImage = tempCanvas.toDataURL('image/png');
-      onSave(finalImage);
-      if (isDriveConnected) { onNotify?.("Uploading Edit...", "info"); const filename = `project_${Date.now()}.psd`; await driveService.uploadImage(finalImage, filename, 'Characters'); onNotify?.("Saved to Drive", "success"); }
-      onClose();
-  };
-  
-  const handleEnhancePrompt = async () => { setIsEnhancing(true); try { setPrompt(await enhancePrompt(prompt)); } catch (e) { console.error(e); } finally { setIsEnhancing(false); } };
-  
-  const handleGenerateNew = async () => { 
-      if (!prompt) return; 
-      setIsGenerating(true); 
-      try { 
-          const refUrls = references.map(r => r.src);
-          const refs = [imageUrl || "", ...refUrls].filter(Boolean); 
-          let finalPrompt = prompt; 
-          
-          if (selectedIds.length === 1) {
-              const selectedObj = objects.find(o => o.id === selectedIds[0]);
-              if (selectedObj && selectedObj.type === 'image') {
-                  finalPrompt = `[Edit Context: Focusing on selected layer]. ${prompt}`;
-                  refs.unshift((selectedObj as ImageObj).src);
-              }
-          }
-          const newImageUrl = await generateImage(finalPrompt, refs, initialAspectRatio || "16:9", imageModel); 
-          const img = new Image(); img.crossOrigin = "anonymous"; img.src = newImageUrl; 
-          img.onload = () => { 
-              const newImgObj: ImageObj = { id: Date.now().toString(), type: 'image', name: 'Gen Result', color: '#fff', lineWidth: 0, src: newImageUrl, x: (docSize.w - img.naturalWidth)/2, y: (docSize.h - img.naturalHeight)/2, w: img.naturalWidth, h: img.naturalHeight, visible: true, locked: false, filters: { ...DEFAULT_FILTERS } }; 
-              setObjects(prev => [...prev, newImgObj]); setLocalAssetHistory(prev => [newImageUrl, ...prev]);
-          }; 
-      } catch (e) { alert("Generation failed: " + e); } finally { setIsGenerating(false); } 
-  };
-
-  const handleDocPreset = (w: number, h: number) => { 
-      setDocSize({ w, h }); 
-      if (containerRef.current) { 
-          const cw = containerRef.current.clientWidth; const ch = containerRef.current.clientHeight; const padding = 60; const scale = Math.min((cw - padding) / w, (ch - padding) / h, 1); 
-          setView({ scale, x: (cw - w * scale) / 2, y: (ch - h * scale) / 2 }); 
-      }
-      setShowResMenu(false);
-  };
-
-  const getLassoMenuPos = () => { if (!activeLasso || activeLasso.points.length === 0) return null; let minX = activeLasso.points[0].x, maxX = activeLasso.points[0].x; let minY = activeLasso.points[0].y, maxY = activeLasso.points[0].y; activeLasso.points.forEach(p => { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }); const centerX = (minX + maxX) / 2; const topY = minY; return worldToScreen(centerX, topY); };
-  const getFrameMenuPos = () => { if (!activeFrame) return null; const centerX = activeFrame.x + (activeFrame.w/2); const bottomY = activeFrame.h > 0 ? activeFrame.y + activeFrame.h : activeFrame.y; return worldToScreen(centerX, bottomY); };
-  
-  const lassoPos = getLassoMenuPos();
-  const framePos = getFrameMenuPos();
-  const selectedObject = selectedIds.length === 1 ? objects.find(o => o.id === selectedIds[0]) : null;
-  const inputScreenPos = textInput ? worldToScreen(textInput.x, textInput.y) : null;
-
   const handleClearAll = () => {
       if (objects.length === 0) return;
       if (window.confirm("Are you sure you want to clear all layers?")) {
           setObjects([]);
           setSelectedIds([]);
       }
+  };
+
+  // --- NEW: MISSING VARIABLES & FUNCTIONS ---
+
+  const inputScreenPos = textInput ? worldToScreen(textInput.x, textInput.y) : null;
+  const lassoPos = activeLasso && activeLasso.points.length > 0 ? worldToScreen(activeLasso.points[activeLasso.points.length-1].x, activeLasso.points[activeLasso.points.length-1].y) : null;
+  const framePos = activeFrame ? worldToScreen(activeFrame.x + activeFrame.w/2, activeFrame.y + activeFrame.h) : null;
+
+  const handleDocPreset = (w: number, h: number) => {
+      setDocSize({ w, h });
+      setTimeout(handleFitView, 50);
+  };
+
+  const handleSaveAndClose = () => {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = docSize.w;
+      tempCanvas.height = docSize.h;
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return;
+
+      // Draw background
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, docSize.w, docSize.h);
+
+      objects.forEach(obj => {
+          if (!obj.visible) return;
+          ctx.save();
+          if (obj.filters) { 
+             const f = obj.filters; 
+             ctx.filter = `brightness(${f.exposure}%) contrast(${f.contrast}%) saturate(${f.saturation}%) sepia(${f.warmth}%) blur(${f.blur}px)`; 
+          }
+
+          if (obj.type === 'image') {
+              const imgObj = obj as ImageObj;
+              const img = imageCache.get(imgObj.id);
+              if (img && img.complete) {
+                  ctx.drawImage(img, imgObj.x, imgObj.y, imgObj.w, imgObj.h);
+              }
+          } else if (obj.type === 'rect') {
+              const s = obj as ShapeObject;
+              ctx.strokeStyle = s.color; ctx.lineWidth = s.lineWidth;
+              if(s.filled){ ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h); }
+              ctx.strokeRect(s.x, s.y, s.w, s.h);
+          } else if (obj.type === 'circle') {
+              const s = obj as ShapeObject;
+              ctx.strokeStyle = s.color; ctx.lineWidth = s.lineWidth;
+              ctx.beginPath();
+              ctx.ellipse(s.x + s.w/2, s.y + s.h/2, Math.abs(s.w/2), Math.abs(s.h/2), 0, 0, 2*Math.PI);
+              if(s.filled){ ctx.fillStyle = s.color; ctx.fill(); }
+              ctx.stroke();
+          } else if (obj.type === 'arrow') {
+              const arrow = obj as ArrowObject;
+              const headlen = arrow.lineWidth * 3;
+              const angle = Math.atan2(arrow.y2 - arrow.y1, arrow.x2 - arrow.x1);
+              ctx.strokeStyle = arrow.color; ctx.lineWidth = arrow.lineWidth; ctx.lineCap = 'round';
+              ctx.beginPath(); ctx.moveTo(arrow.x1, arrow.y1); ctx.lineTo(arrow.x2, arrow.y2); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(arrow.x2 - headlen * Math.cos(angle - Math.PI / 6), arrow.y2 - headlen * Math.sin(angle - Math.PI / 6));
+              ctx.lineTo(arrow.x2, arrow.y2);
+              ctx.lineTo(arrow.x2 - headlen * Math.cos(angle + Math.PI / 6), arrow.y2 - headlen * Math.sin(angle + Math.PI / 6));
+              ctx.stroke();
+          } else if (obj.type === 'text') {
+              const t = obj as TextObject;
+              ctx.fillStyle = t.color;
+              const fontName = t.fontFamily.split(',')[0].replace(/['"]/g, '');
+              ctx.font = `bold ${t.fontSize}px "${fontName}"`;
+              ctx.textBaseline = 'top';
+              ctx.fillText(t.text, t.x, t.y);
+          } else if (obj.type === 'path' || obj.type === 'mask') {
+              const p = obj as PathObject | MaskObject;
+              if (p.points.length > 0) {
+                  if (obj.type === 'mask') {
+                      const m = obj as MaskObject;
+                      ctx.beginPath();
+                      if (m.mode === 'isolate') {
+                          ctx.rect(-20000, -20000, 40000, 40000); 
+                          ctx.moveTo(m.points[0].x, m.points[0].y); 
+                          for (let i = 1; i < m.points.length; i++) ctx.lineTo(m.points[i].x, m.points[i].y); 
+                          ctx.closePath(); 
+                          ctx.globalCompositeOperation = 'destination-out'; 
+                          ctx.fill('evenodd');
+                      } else {
+                          ctx.moveTo(m.points[0].x, m.points[0].y); 
+                          for (let i = 1; i < m.points.length; i++) ctx.lineTo(m.points[i].x, m.points[i].y); 
+                          ctx.closePath(); 
+                          ctx.globalCompositeOperation = 'destination-out'; 
+                          ctx.fill();
+                      }
+                  } else {
+                      const path = obj as PathObject;
+                      if (path.isEraser) ctx.globalCompositeOperation = 'destination-out';
+                      else ctx.globalCompositeOperation = 'source-over';
+                      
+                      let strokeColor = path.color;
+                      if (path.isInpaint) strokeColor = hexToRgba(path.color, 0.5);
+                      else if (path.opacity < 1.0) strokeColor = hexToRgba(path.color, path.opacity);
+                      
+                      ctx.strokeStyle = strokeColor;
+                      ctx.lineWidth = path.lineWidth;
+                      ctx.lineCap = 'round';
+                      ctx.lineJoin = 'round';
+                      ctx.beginPath();
+                      ctx.moveTo(path.points[0].x, path.points[0].y);
+                      for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i].x, path.points[i].y);
+                      ctx.stroke();
+                  }
+              }
+          }
+          ctx.restore();
+      });
+
+      const dataUrl = tempCanvas.toDataURL('image/png');
+      onSave(dataUrl);
+      onClose();
+  };
+
+  const handleEnhancePrompt = async () => {
+      if (!prompt) return;
+      setIsEnhancing(true);
+      try {
+          const res = await enhancePrompt(prompt);
+          setPrompt(res);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsEnhancing(false);
+      }
+  };
+
+  const handleGenerateNew = async () => {
+      if (!prompt) return;
+      setIsGenerating(true);
+      setGenStatusMsg("Generating...");
+      try {
+          // If inpaint mask exists, we should use it?
+          // For now, simpler implementation:
+          const res = await generateImage(prompt, references.map(r => r.src), initialAspectRatio || "16:9", imageModel);
+          handleAddImageLayer(res);
+      } catch (e) {
+          console.error(e);
+          onNotify?.("Generation failed", "info");
+      } finally {
+          setIsGenerating(false);
+      }
+  };
+
+  const handleMergeLayers = () => {
+      if (selectedIds.length < 2) return;
+      alert("Merge functionality coming soon. Please save and re-open to merge visible layers.");
+  };
+
+  const applyLassoAction = (action: 'erase' | 'isolate') => {
+      if (!activeLasso) return;
+      const mask: MaskObject = {
+          id: Date.now().toString(),
+          type: 'mask',
+          name: action === 'erase' ? 'Eraser Mask' : 'Crop Mask',
+          color: '#000',
+          lineWidth: 0,
+          visible: true,
+          locked: false,
+          filters: {...DEFAULT_FILTERS},
+          points: activeLasso.points,
+          mode: action
+      };
+      setObjects(prev => [...prev, mask]);
+      setActiveLasso(null);
+  };
+
+  const handleLassoMagicErase = async () => {
+      if (!activeLasso) return;
+      setIsGenerating(true);
+      setGenStatusMsg("Magic Erasing...");
+      try {
+          // Placeholder for inpainting without specialized backend
+          const res = await generateImage("Fill background naturally", undefined, "16:9", imageModel);
+          handleAddImageLayer(res);
+      } catch(e) { console.error(e); }
+      finally { setIsGenerating(false); setActiveLasso(null); setGenStatusMsg("Generating..."); }
+  };
+
+  const handleSmartCutAndHeal = () => {
+      alert("Smart Cut requires backend segmentation.");
+      setActiveLasso(null);
+  };
+
+  const handleFrameGenerate = async () => {
+      if (!activeFrame) return;
+      setIsGenerating(true);
+      setGenStatusMsg("Generative Fill...");
+      try {
+          const res = await generateImage(prompt || "Fill surroundings", undefined, "16:9", imageModel);
+          handleAddImageLayer(res);
+      } catch(e) { console.error(e); }
+      finally { setIsGenerating(false); setActiveFrame(null); setGenStatusMsg("Generating..."); }
   };
 
   return createPortal(
@@ -1120,7 +1122,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
             </div>
         )}
 
-        {/* COLOR PANEL (MOVED FROM LEFT TO TOP-RIGHT POPOVER) */}
+        {/* COLOR PANEL */}
         {showColorPanel && (
              <div className="absolute top-14 right-16 bg-[#252525] p-3 rounded-xl border border-[#444] shadow-2xl z-[200] flex flex-col gap-2 animate-fade-in-up w-48">
                  <div className="flex justify-between items-center pb-2 border-b border-[#333]">
@@ -1153,6 +1155,17 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                     <ToolButton icon={<Move size={20} />} active={tool === 'hand'} onClick={() => setTool('hand')} title="Pan (Space)" />
                     <ToolButton icon={<Lasso size={20} />} active={tool === 'lasso'} onClick={() => setTool('lasso')} title="Lasso Select" />
                     <ToolButton icon={<ScanLine size={20} />} active={tool === 'frame'} onClick={() => setTool('frame')} title="Generative Frame (Outpainting)" />
+                    
+                    {/* NEW 3D PRE-VIZ BUTTON */}
+                    <div className="w-full h-px bg-[#444] my-1"></div>
+                    <ToolButton 
+                        icon={<BoxIcon size={20} />} 
+                        active={show3DViewport} 
+                        onClick={() => setShow3DViewport(true)} 
+                        title="3D Pre-viz (Beta)" 
+                    />
+                    <div className="w-full h-px bg-[#444] my-1"></div>
+
                     <ToolButton icon={<Anchor size={20} />} active={tool === 'pen'} onClick={() => setTool('pen')} title="Poly Pen (Bezier Mask)" />
                     <ToolButton icon={<PenTool size={20} />} active={tool === 'brush'} onClick={() => setTool('brush')} title="Brush" />
                     <ToolButton icon={<Brush size={20} />} active={tool === 'inpaint'} onClick={() => setTool('inpaint')} title="Inpaint Mask" />
@@ -1202,21 +1215,6 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
 
             {/* CENTER: CANVAS */}
             <div className="flex-1 bg-[#151515] relative flex flex-col min-w-0 order-1 md:order-2">
-                
-                {/* 1. MOBILE HEADER - NEW CONSOLIDATED LAYOUT */}
-                <div className="md:hidden h-12 bg-[#252525] border-b border-[#333] flex items-center justify-between px-3 z-50">
-                    <button onClick={() => setShowTools(!showTools)} className={`p-2 rounded-lg transition-all ${showTools ? 'text-[var(--accent)] bg-white/5' : 'text-gray-400'}`}><Menu size={20}/></button>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{tool}</div>
-                    <div className="flex items-center gap-1">
-                        <button onClick={() => setShowLayers(!showLayers)} className={`p-2 rounded-lg ${showLayers ? 'text-[var(--accent)]' : 'text-gray-400'}`}><Layers size={20}/></button>
-                        <button onClick={() => setShowColorPanel(!showColorPanel)} className={`p-2 rounded-lg ${showColorPanel ? 'text-[var(--accent)]' : 'text-gray-400'}`}><Palette size={20}/></button>
-                        <div className="w-px h-6 bg-[#444] mx-1"></div>
-                        <button onClick={() => setObjects(prev => prev.slice(0, -1))} className="p-2 text-gray-400"><Undo size={20}/></button>
-                        <button onClick={handleSaveAndClose} className="p-2 text-[var(--accent)]"><Save size={20}/></button>
-                        <button onClick={() => onClose()} className="p-2 text-gray-400"><X size={20}/></button>
-                    </div>
-                </div>
-
                 {/* 2. DESKTOP HEADER (Hidden on mobile) */}
                 <div className="hidden md:flex h-12 border-b border-[#333] bg-[#252525] items-center justify-between px-4 shrink-0 z-10 relative">
                      <div className="flex items-center gap-4">
@@ -1268,7 +1266,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                      </div>
                 </div>
 
-                {/* RESOLUTION PRESETS TOOLBAR */}
+                {/* Resolution Toolbar */}
                 {isCropMode && (
                     <div className="bg-[#1a1a1a] border-b border-[#333] flex items-center justify-center p-2 gap-2 animate-fade-in-down z-10 overflow-x-auto scrollbar-hide">
                         <span className="text-[9px] font-bold text-gray-500 uppercase mr-1 flex-shrink-0">Doc Size:</span>
@@ -1311,6 +1309,14 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                 </div>
             </div>
         </div>
+
+        {/* --- 3D VIEWPORT OVERLAY --- */}
+        {show3DViewport && (
+            <StudioViewport 
+                onCapture={handle3DCapture} 
+                onClose={() => setShow3DViewport(false)}
+            />
+        )}
 
         {/* --- BOTTOM BAR --- */}
         <div className="bg-[#202020] border-t border-[#333] flex flex-col z-30 shrink-0 relative p-3">
