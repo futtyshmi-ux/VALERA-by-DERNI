@@ -11,7 +11,7 @@ import {
   Grid, Layers, Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown, ChevronDown, 
   ChevronUp, Lasso, Maximize2, Minimize2, Scissors, ScanLine, Combine, 
   BoxSelect, Focus, Grid3X3, Ruler, PanelRightClose, PanelRightOpen, Anchor, Search,
-  Sliders, Check, Ratio, Aperture, Activity, Sun, Moon, Droplet, Thermometer, CircleDashed, Hash, Triangle, EyeIcon, Menu, LogOut, Filter, Film
+  Sliders, Check, Ratio, Aperture, Activity, Sun, Moon, Droplet, Thermometer, CircleDashed, Hash, Triangle, EyeIcon, Menu, LogOut, Filter, Film, Palette, History
 } from 'lucide-react';
 import { EDITOR_FONTS } from '../constants';
 
@@ -115,10 +115,10 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
   const [tool, setTool] = useState<ToolType>('select');
   const [isShapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
-  const [showTools, setShowTools] = useState(true); // Default hidden on mobile handled by css media query or logic? Let's default true and toggle
+  const [showHistory, setShowHistory] = useState(false);
+  const [showTools, setShowTools] = useState(true); 
   const [showResMenu, setShowResMenu] = useState(false);
   const [showColorPanel, setShowColorPanel] = useState(false);
-  const [showMobileAdjustments, setShowMobileAdjustments] = useState(false);
   
   const [overlayType, setOverlayType] = useState<OverlayType>('none');
   const [showRulers, setShowRulers] = useState(false);
@@ -262,6 +262,34 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
       setSelectedIds([newLayer.id]);
   };
 
+  const handleAddImageLayer = (src: string) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = src;
+      img.onload = () => {
+          if (!containerRef.current) return;
+          const newImg: ImageObj = {
+              id: Date.now().toString(),
+              type: 'image',
+              name: 'History Image',
+              color: '#fff',
+              lineWidth: 0,
+              src: src,
+              x: (docSize.w - img.naturalWidth) / 2,
+              y: (docSize.h - img.naturalHeight) / 2,
+              w: img.naturalWidth,
+              h: img.naturalHeight,
+              visible: true,
+              locked: false,
+              filters: { ...DEFAULT_FILTERS }
+          };
+          setObjects(prev => [...prev, newImg]);
+          setTool('select');
+          setSelectedIds([newImg.id]);
+          setShowHistory(false);
+      };
+  };
+
   const updateObjectFilter = (key: keyof FilterState, value: any) => {
       if (selectedIds.length === 0) return;
       setObjects(prev => prev.map(obj => 
@@ -332,7 +360,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
           if (e.key === 'Enter' && tool === 'pen') { finishPenPath(); }
           if (e.key === 'Escape') { 
               if (tool === 'pen') finishPenPath();
-              else { setActiveLasso(null); setActiveFrame(null); setSelectedIds([]); if (textInput) commitText(); setIsIsolateMode(false); setShowResMenu(false); setShowColorPanel(false); setShowMobileAdjustments(false); }
+              else { setActiveLasso(null); setActiveFrame(null); setSelectedIds([]); if (textInput) commitText(); setIsIsolateMode(false); setShowResMenu(false); setShowColorPanel(false); setShowHistory(false); }
           }
           if ((e.key === 'Delete' || e.key === 'Backspace') && !e.repeat && selectedIds.length > 0 && !textInput) { e.preventDefault(); selectedIds.forEach(id => deleteLayer(id)); }
           if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); setView(v => ({...v, scale: Math.min(v.scale * 1.1, 10)})); }
@@ -1062,6 +1090,56 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
             </div>
         )}
 
+        {/* HISTORY PANEL */}
+        {showHistory && (
+            <div className="fixed inset-0 md:absolute md:inset-auto md:top-14 md:right-4 md:w-64 bg-[#1e1e1e] md:bg-[#252525] md:border md:border-[#444] md:rounded-xl shadow-2xl z-[200] flex flex-col animate-fade-in-up md:max-h-96">
+                <div className="p-4 md:p-3 border-b border-[#333] flex justify-between items-center bg-[#252525]">
+                    <span className="text-sm md:text-xs font-bold uppercase text-gray-200">Global History</span>
+                    <button onClick={() => setShowHistory(false)} className="p-1"><X size={18} className="text-gray-400 hover:text-white"/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                    <div className="grid grid-cols-2 gap-2">
+                        {globalHistory.length > 0 ? (
+                            [...globalHistory].reverse().map((src, i) => (
+                                <div 
+                                    key={i} 
+                                    onClick={() => handleAddImageLayer(src)}
+                                    className="aspect-square bg-black/20 rounded border border-[#333] overflow-hidden group cursor-pointer hover:border-[var(--accent)] transition-all relative"
+                                >
+                                    <img src={src} className="w-full h-full object-cover" alt={`History ${i}`} />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Plus size={20} className="text-white drop-shadow-md"/>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-2 text-center py-8 text-[var(--text-muted)] text-[10px]">No history found.</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* COLOR PANEL (MOVED FROM LEFT TO TOP-RIGHT POPOVER) */}
+        {showColorPanel && (
+             <div className="absolute top-14 right-16 bg-[#252525] p-3 rounded-xl border border-[#444] shadow-2xl z-[200] flex flex-col gap-2 animate-fade-in-up w-48">
+                 <div className="flex justify-between items-center pb-2 border-b border-[#333]">
+                     <span className="text-[10px] font-bold uppercase text-gray-400">Color Palette</span>
+                     <button onClick={() => setShowColorPanel(false)}><X size={14} className="text-gray-500 hover:text-white"/></button>
+                 </div>
+                 <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-8 cursor-pointer rounded border-none" />
+                 <div className="grid grid-cols-5 gap-1.5">
+                     {['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#ffffff','#000000','#9ca3af'].map(c => (
+                         <button key={c} onClick={() => setColor(c)} className="w-6 h-6 rounded-full border border-white/10 hover:scale-110 transition-transform shadow-sm" style={{ backgroundColor: c }}></button>
+                     ))}
+                 </div>
+                 <div className="flex items-center gap-2 mt-1 pt-2 border-t border-[#333]">
+                    <input type="checkbox" checked={isShapeFilled} onChange={(e) => setIsShapeFilled(e.target.checked)} className="accent-[var(--accent)]"/>
+                    <label className="text-[10px] text-gray-300 font-bold uppercase">Fill Shapes</label>
+                 </div>
+             </div>
+        )}
+
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
             {/* TOOLBAR */}
             <div id="ui-canvas-tools" 
@@ -1097,27 +1175,8 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                 
                 <div className="w-16 h-px bg-[#444] my-2 shrink-0"></div>
 
-                {/* Settings Area */}
+                {/* Settings Area (Removed Color Picker from here) */}
                 <div className="flex flex-col gap-4 w-full px-2 items-center">
-                    <div className="flex flex-col items-center gap-1 group relative">
-                         <span className="text-[9px] text-gray-500 font-bold uppercase group-hover:text-[var(--accent)] hidden md:block">Color</span>
-                         <button onClick={() => setShowColorPanel(!showColorPanel)} className="w-10 h-10 rounded-full border-2 border-[#444] overflow-hidden cursor-pointer shadow-lg hover:scale-110 transition-transform" style={{ backgroundColor: color }}></button>
-                         {showColorPanel && (
-                             <div className="absolute left-full top-0 ml-2 bg-[#333] p-3 rounded-xl border border-[#444] shadow-xl z-50 flex flex-col gap-2 animate-fade-in-left">
-                                 <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-8 cursor-pointer rounded" />
-                                 <div className="grid grid-cols-4 gap-1">
-                                     {['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#ffffff','#000000'].map(c => (
-                                         <button key={c} onClick={() => setColor(c)} className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform" style={{ backgroundColor: c }}></button>
-                                     ))}
-                                 </div>
-                                 <div className="flex items-center gap-2 mt-1">
-                                    <label className="text-[9px] text-gray-400">Fill</label>
-                                    <input type="checkbox" checked={isShapeFilled} onChange={(e) => setIsShapeFilled(e.target.checked)} className="accent-[var(--accent)]"/>
-                                 </div>
-                             </div>
-                         )}
-                    </div>
-
                     {tool === 'text' && (
                         <>
                             <div className="flex flex-col gap-1 w-full px-1">
@@ -1150,6 +1209,7 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                     <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{tool}</div>
                     <div className="flex items-center gap-1">
                         <button onClick={() => setShowLayers(!showLayers)} className={`p-2 rounded-lg ${showLayers ? 'text-[var(--accent)]' : 'text-gray-400'}`}><Layers size={20}/></button>
+                        <button onClick={() => setShowColorPanel(!showColorPanel)} className={`p-2 rounded-lg ${showColorPanel ? 'text-[var(--accent)]' : 'text-gray-400'}`}><Palette size={20}/></button>
                         <div className="w-px h-6 bg-[#444] mx-1"></div>
                         <button onClick={() => setObjects(prev => prev.slice(0, -1))} className="p-2 text-gray-400"><Undo size={20}/></button>
                         <button onClick={handleSaveAndClose} className="p-2 text-[var(--accent)]"><Save size={20}/></button>
@@ -1187,7 +1247,17 @@ export const ImageEditorModal: React.FC<Props> = ({ imageUrl, historyImages = []
                         <div className="flex items-center gap-1">
                             <button onClick={cycleOverlay} className={`p-2 rounded-lg transition-all ${overlayType !== 'none' ? 'text-[var(--accent)] bg-[var(--accent)]/10' : 'text-gray-400 hover:text-white'}`} title="Cycle Overlays (Grid, Safe Zones, Cinema)">{overlayType === 'cinema-235' ? <ScanLine size={18}/> : overlayType === 'safe-zones' ? <Maximize2 size={18}/> : <Grid3X3 size={18}/>}</button>
                             <button onClick={() => setShowRulers(!showRulers)} className={`p-2 rounded-lg transition-all ${showRulers ? 'text-[var(--accent)] bg-[var(--accent)]/10' : 'text-gray-400 hover:text-white'}`} title="Rulers"><Ruler size={18}/></button>
+                            
+                            {/* MOVED: Color Picker & History */}
+                            <div className="w-px h-6 bg-[#444] mx-1"></div>
+                            <button onClick={() => setShowColorPanel(!showColorPanel)} className={`p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold uppercase ${showColorPanel ? 'bg-[var(--accent)] text-white' : 'text-gray-400 hover:text-white'}`} title="Color Picker">
+                                <Palette size={18}/>
+                            </button>
+                            <button onClick={() => setShowHistory(!showHistory)} className={`p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold uppercase ${showHistory ? 'bg-[var(--accent)] text-white' : 'text-gray-400 hover:text-white'}`} title="Image History">
+                                <History size={18}/>
+                            </button>
                             <button onClick={() => setShowLayers(!showLayers)} className={`p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold uppercase ${showLayers ? 'bg-[var(--accent)] text-white' : 'text-gray-400 hover:text-white'}`}><Layers size={18}/> <span className="hidden sm:inline">Layers</span></button>
+                            
                             <div className="w-px h-6 bg-[#444] mx-1"></div>
                             <button onClick={() => setObjects(prev => prev.slice(0, -1))} className="p-2 text-gray-400 hover:text-white hover:bg-[#333] rounded-lg transition-all" title="Undo"><Undo size={18}/></button>
                             <button onClick={() => handleClearAll()} className="p-2 text-gray-400 hover:text-red-400 hover:bg-[#333] rounded-lg transition-all" title="Clear All"><Trash size={18}/></button>

@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TimelineFrame, Character, TimelineSettings, ChatMessage, LabAssetSuggestion, TimelineSuggestion, DirectorAction, GenerationLogEntry } from '../types';
 import { enhancePrompt, generateImage, generateVoiceDirection } from '../services/geminiService';
 import { driveService } from '../services/driveService';
-import { Trash2, Film, Sparkles, Wand2, Image as ImageIcon, Music, Mic, Users, Eye, RefreshCw, Maximize2, MapPin, Box, CheckCircle, Clock, ChevronRight, Plus, Monitor, Settings2, Camera, User, ChevronLeft, ChevronDown, ChevronUp, SlidersHorizontal, PanelRightClose, PanelLeftClose, PanelLeftOpen, Upload, Gauge, Pencil, Play, SkipForward, SkipBack, Minimize2, Download, Scaling, ScanLine, Star, Clapperboard, Send, GripHorizontal, X, Eraser, Undo, Redo, PanelRightOpen, ArrowLeft, AlertTriangle, Layout, Video } from 'lucide-react';
+import { Trash2, Film, Sparkles, Wand2, Image as ImageIcon, Music, Mic, Users, Eye, RefreshCw, Maximize2, MapPin, Box, CheckCircle, Clock, ChevronRight, Plus, Monitor, Settings2, Camera, User, ChevronLeft, ChevronDown, ChevronUp, SlidersHorizontal, PanelRightClose, PanelLeftClose, PanelLeftOpen, Upload, Gauge, Pencil, Play, SkipForward, SkipBack, Minimize2, Download, Scaling, ScanLine, Star, Clapperboard, Send, GripHorizontal, X, Eraser, Undo, Redo, PanelRightOpen, ArrowLeft, AlertTriangle, Layout, Video, History, Copy } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { CharacterManager } from './CharacterManager';
 import { DirectingHub } from './DirectingHub';
@@ -431,7 +430,7 @@ export const TimelineManager: React.FC<Props> = ({
   const [isSettingsPanelCollapsed, setIsSettingsPanelCollapsed] = useState(false);
   const [isToolsFullScreen, setIsToolsFullScreen] = useState(false); 
   const [isSequenceVisible, setIsSequenceVisible] = useState(true);
-  const [rightSidebarTab, setRightSidebarTab] = useState<'scene' | 'assets'>('assets'); 
+  const [rightSidebarTab, setRightSidebarTab] = useState<'scene' | 'assets' | 'history'>('assets'); 
   const [isTimelineFit, setIsTimelineFit] = useState(false);
 
   const [activeFrameId, setActiveFrameId] = useState<string | null>(frames.length > 0 ? frames[0].id : null);
@@ -894,6 +893,17 @@ export const TimelineManager: React.FC<Props> = ({
           image: newImg,
           imageHistory: [...(frame.imageHistory || []), newImg]
       });
+      // Also Log this edit
+      if (onLogGeneration) {
+          onLogGeneration({
+              id: Date.now().toString(),
+              timestamp: Date.now(),
+              prompt: "Manual Edit",
+              imageData: newImg,
+              sourceId: frame.id,
+              sourceName: frame.title
+          });
+      }
   };
 
   const handleFillFrame = async (frame: TimelineFrame) => {
@@ -906,6 +916,16 @@ export const TimelineManager: React.FC<Props> = ({
               image: newImage, 
               imageHistory: [...(frame.imageHistory || []), newImage]
           });
+          if (onLogGeneration) {
+              onLogGeneration({
+                  id: Date.now().toString(),
+                  timestamp: Date.now(),
+                  prompt: "Outpainting Fill",
+                  imageData: newImage,
+                  sourceId: frame.id,
+                  sourceName: frame.title
+              });
+          }
       } catch(e) {
           console.error(e);
       } finally {
@@ -948,6 +968,17 @@ export const TimelineManager: React.FC<Props> = ({
                   image: res,
                   imageHistory: [...(activeFrame?.imageHistory || []), res]
               });
+              // LOG UPLOAD TO HISTORY
+              if (onLogGeneration && activeFrame) {
+                  onLogGeneration({
+                      id: Date.now().toString(),
+                      timestamp: Date.now(),
+                      prompt: "Uploaded Image",
+                      imageData: res,
+                      sourceId: id,
+                      sourceName: activeFrame.title
+                  });
+              }
           };
           reader.readAsDataURL(file);
       }
@@ -1144,7 +1175,8 @@ export const TimelineManager: React.FC<Props> = ({
                         <div className="flex-1 overflow-hidden flex flex-col"> 
                             <div className="flex border-b border-[var(--border-color)] bg-[var(--bg-header)]"> 
                                 <button onClick={() => setRightSidebarTab('scene')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-colors ${rightSidebarTab === 'scene' ? 'text-[var(--accent)] bg-[var(--bg-card)] border-b-2 border-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}> <SlidersHorizontal size={12}/> Scene </button> 
-                                <button onClick={() => setRightSidebarTab('assets')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-colors ${rightSidebarTab === 'assets' ? 'text-[var(--accent)] bg-[var(--bg-card)] border-b-2 border-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}> <Users size={12}/> Assets </button> 
+                                <button onClick={() => setRightSidebarTab('assets')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-colors ${rightSidebarTab === 'assets' ? 'text-[var(--accent)] bg-[var(--bg-card)] border-b-2 border-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}> <Users size={12}/> Assets </button>
+                                <button onClick={() => setRightSidebarTab('history')} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-colors ${rightSidebarTab === 'history' ? 'text-[var(--accent)] bg-[var(--bg-card)] border-b-2 border-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}> <History size={12}/> History </button>
                             </div> 
                             <div className="flex-1 overflow-y-auto custom-scrollbar"> 
                                 {rightSidebarTab === 'scene' ? ( 
@@ -1163,6 +1195,33 @@ export const TimelineManager: React.FC<Props> = ({
                                     ) : ( 
                                         <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)] text-xs p-4 h-full"> <Film size={32} className="mb-2 opacity-20"/> No Scene Selected </div> 
                                     ) 
+                                ) : rightSidebarTab === 'history' ? (
+                                    <div className="p-3">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[...generationLog].reverse().map((entry) => (
+                                                <div 
+                                                    key={entry.id} 
+                                                    className="aspect-video bg-black/20 rounded border border-[#333] overflow-hidden group relative cursor-grab active:cursor-grabbing hover:border-[var(--accent)] transition-colors"
+                                                    draggable={true}
+                                                    onDragStart={(e) => {
+                                                        e.dataTransfer.setData('application/react-dnd-asset', JSON.stringify({ image: entry.imageData, name: entry.prompt || 'History Image' }));
+                                                        e.dataTransfer.effectAllowed = 'copy';
+                                                    }}
+                                                >
+                                                    <img src={entry.imageData} className="w-full h-full object-cover" alt={entry.prompt} />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 flex flex-col justify-end">
+                                                        <div className="text-[9px] text-white font-bold truncate">{entry.sourceName || 'Generated'}</div>
+                                                        <div className="text-[8px] text-gray-400 truncate">{new Date(entry.timestamp).toLocaleTimeString()}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {generationLog.length === 0 && (
+                                                <div className="col-span-2 text-center py-8 text-[var(--text-muted)] text-[10px]">
+                                                    No history yet. Generate or upload images to populate this list.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 ) : ( 
                                     <div className="p-3 h-full"> 
                                         <CharacterManager 
