@@ -170,11 +170,11 @@ const App: React.FC = () => {
 
   // --- MASTER EXPORT HANDLER ---
   const handleExportZip = async () => {
-    showNotify("Generating Export Package...", "info");
+    showNotify("Generating Master Package...", "info");
     try {
         const zip = new JSZip();
         
-        // 1. Assets & Frames Images
+        // 1. ACTIVE ASSETS (Current Project)
         const imgFolder = zip.folder("images");
         projectData.references.forEach(char => {
             if (char.image) {
@@ -188,32 +188,65 @@ const App: React.FC = () => {
                 imgFolder?.file(`Scene_${idx+1}_${safeTitle}.png`, frame.image.split(',')[1], {base64: true});
             }
         });
-        
-        // 2. Project Data (JSON)
-        zip.file("project_data.json", JSON.stringify(projectData, null, 2));
-        
-        // 3. DaVinci: Python Automation Script (Recommended)
-        const pyScript = generateDaVinciPythonScript(projectData);
-        zip.file("import_project.py", pyScript);
 
-        // 4. DaVinci: XML (Fallback 1)
+        // 2. HISTORY ASSETS (All generations)
+        if (projectData.generationLog && projectData.generationLog.length > 0) {
+            const histFolder = zip.folder("history_generations");
+            projectData.generationLog.forEach((log, i) => {
+                if (log.imageData) {
+                    const dateStr = new Date(log.timestamp).toISOString().replace(/[:.]/g, '-');
+                    const safeSrc = (log.sourceName || "gen").replace(/[^a-z0-9]/gi, '_');
+                    // Ensure unique filenames
+                    histFolder?.file(`${dateStr}_${i}_${safeSrc}.png`, log.imageData.split(',')[1], {base64: true});
+                }
+            });
+        }
+        
+        // 3. Project Data (JSON)
+        zip.file("project_data.json", JSON.stringify(projectData, null, 2));
+
+        // 4. Director Chat Log
+        if (projectData.directorHistory && projectData.directorHistory.length > 0) {
+            const chatLog = projectData.directorHistory.map(msg => {
+                const role = msg.role === 'user' ? 'PRODUCER' : 'VALERA';
+                const time = new Date(msg.timestamp).toLocaleString();
+                const attachments = msg.attachments?.map(a => `[Attachment: ${a.name}]`).join(', ') || '';
+                return `[${time}] ${role}:\n${msg.text}\n${attachments}\n${'-'.repeat(40)}\n`;
+            }).join('\n');
+            zip.file("director_chat.txt", chatLog);
+        }
+        
+        // 5. DaVinci: Python Automation Script (Recommended)
+        const pyScript = generateDaVinciPythonScript(projectData);
+        zip.file("import_to_davinci.py", pyScript);
+
+        // 6. DaVinci: XML (Fallback 1)
         const daVinciXML = generateDaVinciXML(projectData);
         zip.file("timeline.fcpxml", daVinciXML);
 
-        // 5. DaVinci: EDL (Fallback 2 - Universal)
+        // 7. DaVinci: EDL (Fallback 2 - Universal)
         const edl = generateEDL(projectData);
         zip.file("timeline.edl", edl);
 
-        // 6. Subtitles (SRT)
+        // 8. Subtitles (SRT)
         const srtContent = generateSRT(projectData);
         zip.file("subtitles.srt", srtContent);
 
-        // 7. Instructions
+        // 9. Instructions
         const installText = `
 VALERA PRE-PRODUCTION - MASTER EXPORT PACKAGE
 =============================================
 
 This ZIP contains everything you need for editing in DaVinci Resolve, Premiere Pro, or Final Cut.
+
+[FOLDERS]
+/images              -> Clean assets used in the current timeline
+/history_generations -> All AI generated variants and drafts (Backup)
+
+[FILES]
+project_data.json    -> Raw data backup
+director_chat.txt    -> Full correspondence with AI Director
+subtitles.srt        -> Dialogue subtitle file
 
 ----------------------------------------------------------------
 OPTION 1: AUTOMATED IMPORT (DaVinci Resolve - FASTEST)
@@ -222,7 +255,7 @@ OPTION 1: AUTOMATED IMPORT (DaVinci Resolve - FASTEST)
 2. Open DaVinci Resolve.
 3. In the top menu, go to "Workspace" -> "Console".
 4. Select "Py3" (Python 3) at the top of the console window.
-5. Drag and drop the 'import_project.py' file into the console area.
+5. Drag and drop the 'import_to_davinci.py' file into the console area.
    OR: Open the file in a text editor, copy the code, and paste it into the console.
    
    -> This will automatically import all images, create a sequence, and place clips with correct duration.
@@ -241,11 +274,6 @@ OPTION 3: UNIVERSAL IMPORT (EDL)
 1. Import all images from the 'images' folder into your Media Pool manually.
 2. Go to File -> Import -> Timeline...
 3. Select 'timeline.edl'.
-
-----------------------------------------------------------------
-SUBTITLES
-----------------------------------------------------------------
-- Drag 'subtitles.srt' into your timeline to get a subtitle track with all dialogue.
 `;
         zip.file("README_IMPORT.txt", installText);
 

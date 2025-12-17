@@ -49,17 +49,36 @@ import os
 # --- VALERA PRE-PRODUCTION: AUTOMATED IMPORT SCRIPT ---
 # 1. Open DaVinci Resolve
 # 2. Go to "Workspace" -> "Console" -> Select "Py3" (Python 3)
-# 3. Drag and drop this file into the console window or run it.
+# 3. Drag and drop this file into the console window.
 # NOTE: Ensure the 'images' folder is in the same directory as this script.
 
 def ImportProject():
+    resolve = None
+    
+    # 1. Try accessing global 'resolve' (Standard for Internal Console)
+    # The 'resolve' object is often available directly in the global scope of the embedded Python console.
     try:
-        import DaVinciResolveScript as dvr_script
-    except ImportError:
-        print("Error: Could not import DaVinciResolveScript. Are you running this inside DaVinci Console?")
+        # Check locals and globals
+        if 'resolve' in locals():
+            resolve = locals()['resolve']
+        elif 'resolve' in globals():
+            resolve = globals()['resolve']
+    except:
+        pass
+
+    # 2. Try Importing Module (For External Scripts / Fallback)
+    if not resolve:
+        try:
+            import DaVinciResolveScript as dvr_script
+            resolve = dvr_script.scriptapp("Resolve")
+        except ImportError:
+            pass
+    
+    if not resolve:
+        print("❌ Error: Could not connect to DaVinci Resolve API.")
+        print("Please run this script INSIDE DaVinci Resolve (Workspace -> Console -> Py3).")
         return
 
-    resolve = dvr_script.scriptapp("Resolve")
     projectManager = resolve.GetProjectManager()
     project = projectManager.GetCurrentProject()
     
@@ -76,12 +95,29 @@ def ImportProject():
     
     # 1. Locate Images Folder
     # We assume the script is located in the root of the exported folder
-    script_path = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals() else os.getcwd()
+    # When running in console via drag/drop, __file__ might not be reliable, so we fallback to asking or assume current dir if possible.
+    # However, standard practice is to rely on user putting script in folder or setting path.
+    
+    # Attempt to find path
+    script_path = ""
+    try:
+        script_path = os.path.dirname(os.path.abspath(__file__))
+    except:
+        # Fallback for console execution where __file__ is undefined
+        # We try to use the current working directory, but often this is DaVinci's bin.
+        # Simple fix: Look for 'images' in standard download location or ask user?
+        # Better: Assume user opens the .py file from the folder, so os.getcwd() might work if launched via terminal
+        script_path = os.getcwd()
+
     images_path = os.path.join(script_path, "images")
     
+    # Hard check: if not found, we iterate common relative paths or ask user to verify
     if not os.path.exists(images_path):
-        print(f"Error: Images folder not found at {images_path}")
-        # Fallback: Ask user input if running in interactive shell (rare in DVR console)
+        # Fallback: Try looking in common downloads if script path is weird
+        print(f"⚠️ Warning: Images folder not found at {images_path}")
+        print("Please ensure this script is inside the extracted 'Valera_Project' folder.")
+        # Attempt to prompt is hard in non-interactive console. 
+        # We stop here to avoid errors.
         return
 
     print(f"Found images at: {images_path}")
